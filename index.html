@@ -6,6 +6,7 @@
   <meta name="theme-color" content="#1B3A6B">
   <title>MetriLab</title>
   <link rel="manifest" href="manifest.json">
+  <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f8fafc; color: #1e293b; }
@@ -37,13 +38,16 @@
 
     .btn-primary { background: #1B3A6B; color: white; border: none; border-radius: 12px; padding: 14px; width: 100%; font-size: 14px; font-weight: 500; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; margin-bottom: 10px; }
     .btn-primary:active { opacity: 0.9; transform: scale(0.98); }
+    .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
     .btn-secondary { background: #f1f5f9; color: #1B3A6B; border: none; border-radius: 12px; padding: 12px; width: 100%; font-size: 13px; font-weight: 500; cursor: pointer; margin-bottom: 8px; }
     .btn-green { background: #2ECC40; color: white; border: none; border-radius: 12px; padding: 14px; width: 100%; font-size: 14px; font-weight: 500; cursor: pointer; margin-bottom: 10px; }
+    .btn-green:disabled { opacity: 0.5; cursor: not-allowed; background: #94a3b8; }
     .btn-red { background: #dc2626; color: white; border: none; border-radius: 12px; padding: 12px; width: 100%; font-size: 13px; font-weight: 500; cursor: pointer; margin-bottom: 8px; }
 
     .badge { display: inline-block; padding: 3px 10px; border-radius: 6px; font-size: 11px; font-weight: 500; }
     .badge-green { background: #dcfce7; color: #166534; }
     .badge-blue { background: #dbeafe; color: #1e40af; }
+    .badge-yellow { background: #fef9c3; color: #854d0e; }
 
     .lote-row { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid #f1f5f9; }
     .lote-row:last-child { border: none; }
@@ -77,11 +81,10 @@
     .spinner { width: 32px; height: 32px; border: 3px solid #e2e8f0; border-top-color: #1B3A6B; border-radius: 50%; animation: spin 0.8s linear infinite; margin: 0 auto 10px; }
     @keyframes spin { to { transform: rotate(360deg); } }
 
-    .toast { position: fixed; top: 80px; left: 50%; transform: translateX(-50%); background: #1B3A6B; color: white; padding: 10px 20px; border-radius: 10px; font-size: 13px; z-index: 999; display: none; white-space: nowrap; }
+    .toast { position: fixed; top: 80px; left: 50%; transform: translateX(-50%); background: #1B3A6B; color: white; padding: 10px 20px; border-radius: 10px; font-size: 13px; z-index: 999; display: none; white-space: nowrap; max-width: 90%; text-align: center; }
     .toast.show { display: block; animation: fadeIn 0.3s; }
     @keyframes fadeIn { from { opacity: 0; transform: translateX(-50%) translateY(-10px); } to { opacity: 1; transform: translateX(-50%) translateY(0); } }
 
-    /* SETUP SCREEN */
     .setup-screen { position: fixed; inset: 0; background: #1B3A6B; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 24px; z-index: 1000; }
     .setup-logo { width: 80px; height: 80px; background: linear-gradient(135deg, #1E90FF, #2ECC40); border-radius: 24px; display: flex; align-items: center; justify-content: center; margin-bottom: 16px; }
     .setup-logo svg { width: 44px; height: 44px; fill: white; }
@@ -90,11 +93,17 @@
     .setup-card { background: white; border-radius: 16px; padding: 20px; width: 100%; max-width: 360px; }
     .setup-label { font-size: 13px; font-weight: 600; color: #1B3A6B; margin-bottom: 6px; }
     .setup-hint { font-size: 11px; color: #94a3b8; margin-bottom: 10px; }
+
+    .medidor-item { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 12px; margin-bottom: 10px; }
+    .medidor-num { display: inline-block; background: #1B3A6B; color: white; padding: 2px 8px; border-radius: 6px; font-size: 11px; font-weight: 600; margin-bottom: 6px; }
+    .medidor-data { font-size: 11px; color: #64748b; margin-bottom: 8px; }
+    .medidor-select { width: 100%; padding: 8px; font-size: 12px; border: 1px solid #e2e8f0; border-radius: 8px; background: white; }
+    .medidor-select.empty { border-color: #f59e0b; background: #fef9c3; }
   </style>
 </head>
 <body>
 
-<!-- SETUP SCREEN -->
+<!-- SETUP -->
 <div class="setup-screen" id="setup-screen">
   <div class="setup-logo">
     <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 14H9V8h2v8zm4 0h-2V8h2v8z"/></svg>
@@ -111,7 +120,6 @@
       <option value="Marco David Rodríguez Valencia">Marco David Rodríguez Valencia</option>
     </select>
     <button class="btn-primary" onclick="guardarConfiguracion()">
-      <svg width="18" height="18" fill="white" viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
       Comenzar
     </button>
   </div>
@@ -185,16 +193,22 @@
 
     <div id="resultado-actual"></div>
 
-    <div id="btn-finalizar" style="display:none">
+    <div id="seccion-observaciones" style="display:none">
+      <div class="card">
+        <div class="section-title">📋 Observaciones por medidor</div>
+        <p style="font-size:11px;color:#64748b;margin-bottom:12px">Selecciona una observación para cada medidor antes de finalizar.</p>
+        <div id="lista-observaciones"></div>
+      </div>
+
       <div style="background:#fef9c3;border:1px solid #fde68a;border-radius:10px;padding:12px;margin-bottom:10px">
-        <p style="font-size:12px;color:#92400e;text-align:center">Confirma que el proceso fue supervisado correctamente</p>
-        <label style="display:flex;align-items:center;gap:8px;margin-top:8px;cursor:pointer">
-          <input type="checkbox" id="confirmar-check" style="width:18px;height:18px">
-          <span style="font-size:12px;color:#1B3A6B;font-weight:500" id="confirmar-label">Confirmo — operario</span>
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+          <input type="checkbox" id="confirmar-check" style="width:18px;height:18px" onchange="actualizarBotonFinalizar()">
+          <span style="font-size:12px;color:#1B3A6B;font-weight:500" id="confirmar-label">Confirmo la supervisión</span>
         </label>
       </div>
-      <button class="btn-green" onclick="finalizarLote()">
-        Finalizar lote y descargar Excel
+
+      <button class="btn-green" id="btn-finalizar" onclick="finalizarLote()" disabled>
+        Finalizar lote y descargar reporte
       </button>
     </div>
   </div>
@@ -239,14 +253,9 @@
     </div>
     <div class="card" style="margin-bottom:12px">
       <div class="section-title">Configuración API</div>
-      <div class="setup-hint" style="font-size:12px;color:#64748b;margin-bottom:10px">Cambia tu clave de Gemini si es necesario</div>
       <input class="input-box" type="password" id="nueva-key" placeholder="Nueva clave API">
       <button class="btn-secondary" onclick="cambiarClave()">Actualizar clave</button>
     </div>
-    <button class="btn-primary" onclick="exportarHistorial()">
-      <svg width="18" height="18" fill="white" viewBox="0 0 24 24"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg>
-      Exportar historial completo
-    </button>
     <button class="btn-red" onclick="limpiarDatos()">Eliminar todos los datos</button>
   </div>
 
@@ -271,27 +280,49 @@
 </div>
 
 <script>
+const OBSERVACIONES = [
+  "NINGUNA",
+  "PRESENCIA DE CORROSIÓN SOBRE MEDIDOR",
+  "PRESENCIA DE GOLPE SOBRE MEDIDOR",
+  "PRESENCIA DE CONTAMINANTE SOBRE MEDIDOR",
+  "PRESENCIA DE RAYADURA SOBRE MEDIDOR",
+  "ODÓMETRO SE DETIENE",
+  "ODÓMETRO NO GIRA",
+  "AUSENCIA DE PRECINTO DE SEGURIDAD",
+  "PRECINTO DE SEGURIDAD ROTO",
+  "PRESENCIA DE CONTAMINANTES SOBRE LUNETA",
+  "PRESENCIA DE FISURA SOBRE LUNETA",
+  "PRESENCIA DE RAYADURA SOBRE LUNETA",
+  "PRESENCIA DE CONTAMINANTE SOBRE ROSCA",
+  "PRESENCIA DE CORROSIÓN SOBRE ROSCA",
+  "PRESENCIA DE GOLPE SOBRE ROSCA",
+  "SELLOS DE SEGURIDAD DE ODÓMETRO ROTOS",
+  "AUSENCIA DE TORNILLOS DE SEGURIDAD"
+];
+
 let loteActual = [];
+let fotosActual = [];
+let observacionesActual = [];
 let procesando = false;
 let historial = JSON.parse(localStorage.getItem('metrilab_historial') || '[]');
+let contadorLoteDia = JSON.parse(localStorage.getItem('metrilab_contador') || '{}');
 
-const PROMPT = `Analiza esta imagen de un medidor de gas con mucho detalle.
+const PROMPT = `Analiza esta imagen de un medidor de gas con extremo detalle.
 Extrae exactamente estos datos y devuélvelos SOLO en formato JSON sin texto adicional:
 {"marca":"","modelo":"","serie_medidor":"","registro":"","unidad":"","volumen_ciclico":"","serie_precinto":""}
-Instrucciones:
 - marca: nombre del fabricante (ej: METREX)
 - modelo: capacidad del medidor, siempre con punto (ej: G1.6)
-- serie_medidor: numero de serie del medidor
-- registro: lectura con SIEMPRE coma como separador decimal (ej: 00954,095 nunca 00954.095)
-- unidad: unidad de medida (ej: m3)
-- volumen_ciclico: valor V de la placa (ej: 0.7 dm3)
-- serie_precinto: numero del precinto formato G seguido de 7 digitos. Puede estar rotado 180 grados. Si no es visible, pon null.
-Si no puedes leer algun dato, pon null.`;
+- serie_medidor: numero de serie
+- registro: lectura con SIEMPRE coma como separador decimal (ej: 00954,095)
+- unidad: unidad (ej: m3)
+- volumen_ciclico: valor V (ej: 0.7 dm3)
+- serie_precinto: formato G + 7 dígitos. Puede estar rotado en cualquier ángulo. Si no es visible pon null.
+Si no puedes leer pon null.`;
 
 function guardarConfiguracion() {
   const key = document.getElementById('setup-key').value.trim();
   const operario = document.getElementById('setup-operario').value;
-  if (!key) { alert('Ingresa tu clave API de Gemini'); return; }
+  if (!key) { alert('Ingresa tu clave API'); return; }
   localStorage.setItem('metrilab_key', key);
   localStorage.setItem('metrilab_operario', operario);
   document.getElementById('setup-screen').style.display = 'none';
@@ -314,21 +345,30 @@ function cambiarClave() {
   if (!key) { showToast('Ingresa la nueva clave'); return; }
   localStorage.setItem('metrilab_key', key);
   document.getElementById('nueva-key').value = '';
-  showToast('Clave actualizada correctamente');
+  showToast('Clave actualizada');
 }
 
 function getFecha() {
   return new Date().toLocaleString('es-PE', {timeZone:'America/Lima', hour12:false}).replace(',','');
 }
 
+function getFechaISO() {
+  const d = new Date().toLocaleString('en-CA', {timeZone:'America/Lima'}).split(',')[0];
+  return d;
+}
+
 function getLote() {
-  const d = new Date().toLocaleString('es-PE', {timeZone:'America/Lima'});
-  const parts = d.split('/');
-  const day = parts[0].padStart(2,'0');
-  const month = parts[1].padStart(2,'0');
-  const year = parts[2].split(',')[0];
-  const count = historial.filter(l => l.lote.includes(`${year}${month}${day}`)).length + 1;
-  return `L-${year}${month}${day}-${String(count).padStart(2,'0')}`;
+  const fechaISO = getFechaISO();
+  if (!contadorLoteDia[fechaISO]) contadorLoteDia[fechaISO] = 0;
+  contadorLoteDia[fechaISO]++;
+  localStorage.setItem('metrilab_contador', JSON.stringify(contadorLoteDia));
+  return `QV${contadorLoteDia[fechaISO]}-VP-${fechaISO}`;
+}
+
+function getLoteSinIncrementar() {
+  const fechaISO = getFechaISO();
+  const num = (contadorLoteDia[fechaISO] || 0) + 1;
+  return `QV${num}-VP-${fechaISO}`;
 }
 
 function showToast(msg) {
@@ -350,17 +390,15 @@ function goTo(screen) {
 }
 
 function iniciarRegistro() {
-  document.getElementById('lote-actual').textContent = 'Lote: ' + getLote();
+  document.getElementById('lote-actual').textContent = 'Lote: ' + getLoteSinIncrementar();
   document.getElementById('fecha-actual').textContent = getFecha().substring(0,10);
   const op = document.getElementById('operario-select').value;
   document.getElementById('confirmar-label').textContent = `Confirmo — ${op.split(' ')[0]} ${op.split(' ')[1]}`;
 }
 
 function actualizarInicio() {
-  const hoy = new Date().toLocaleDateString('es-PE', {timeZone:'America/Lima'});
-  const [d,m,y] = hoy.split('/');
-  const fechaKey = `${y}-${m.padStart(2,'0')}-${d.padStart(2,'0')}`;
-  const lotesHoy = historial.filter(l => l.fecha.startsWith(fechaKey) || l.fecha.includes(hoy));
+  const fechaISO = getFechaISO();
+  const lotesHoy = historial.filter(l => l.lote.includes(`-VP-${fechaISO}`));
   document.getElementById('lotes-hoy').textContent = lotesHoy.length;
   document.getElementById('medidores-hoy').textContent = lotesHoy.reduce((a,l) => a + l.medidores.length, 0);
   const op = localStorage.getItem('metrilab_operario') || '';
@@ -394,7 +432,6 @@ function actualizarHistorial() {
       </div>
       <div style="font-size:12px;color:#64748b;margin-bottom:6px">${l.fecha} · ${l.operario}</div>
       <div style="font-size:12px;color:#1e293b">${l.medidores.length} medidores registrados</div>
-      <div style="margin-top:8px;font-size:11px;color:#94a3b8">${l.medidores.map(m=>m.serie_medidor).join(', ')}</div>
     </div>`).join('');
 }
 
@@ -434,17 +471,20 @@ async function procesarFoto(input) {
 
     if (datos) {
       loteActual.push(datos);
+      fotosActual.push(e.target.result);
+      observacionesActual.push("");
       actualizarProgreso();
       document.getElementById('resultado-actual').innerHTML = `
         <div class="resultado">
           <div class="resultado-title">Medidor ${loteActual.length} registrado</div>
-          <div class="resultado-row"><span class="resultado-key">Marca</span><span class="resultado-val">${datos.marca}</span></div>
-          <div class="resultado-row"><span class="resultado-key">Modelo</span><span class="resultado-val">${datos.modelo}</span></div>
+          <div class="resultado-row"><span class="resultado-key">Marca</span><span class="resultado-val">${datos.marca||'METREX'}</span></div>
+          <div class="resultado-row"><span class="resultado-key">Modelo</span><span class="resultado-val">${datos.modelo||'G1.6'}</span></div>
           <div class="resultado-row"><span class="resultado-key">Serie</span><span class="resultado-val">${datos.serie_medidor}</span></div>
           <div class="resultado-row"><span class="resultado-key">Registro</span><span class="resultado-val">${datos.registro} ${datos.unidad}</span></div>
           <div class="resultado-row"><span class="resultado-key">Precinto</span><span class="resultado-val">${datos.serie_precinto||'N/D'}</span></div>
         </div>`;
-      document.getElementById('btn-finalizar').style.display = 'block';
+      document.getElementById('seccion-observaciones').style.display = 'block';
+      renderObservaciones();
     } else {
       document.getElementById('resultado-actual').innerHTML = `<div class="card" style="border-color:#fca5a5;background:#fef2f2"><p style="color:#dc2626;font-size:13px;text-align:center">No se pudo leer el medidor. Intenta de nuevo.</p></div>`;
     }
@@ -454,62 +494,103 @@ async function procesarFoto(input) {
   reader.readAsDataURL(file);
 }
 
+function renderObservaciones() {
+  const cont = document.getElementById('lista-observaciones');
+  cont.innerHTML = loteActual.map((d, i) => `
+    <div class="medidor-item">
+      <div class="medidor-num">#${i+1}</div>
+      <div class="medidor-data">Serie: ${d.serie_medidor} · Registro: ${d.registro} ${d.unidad}</div>
+      <select class="medidor-select ${observacionesActual[i]?'':'empty'}" onchange="cambiarObservacion(${i}, this.value)">
+        <option value="">— Selecciona observación —</option>
+        ${OBSERVACIONES.map(o => `<option value="${o}" ${observacionesActual[i]===o?'selected':''}>${o}</option>`).join('')}
+      </select>
+    </div>
+  `).join('');
+  actualizarBotonFinalizar();
+}
+
+function cambiarObservacion(idx, valor) {
+  observacionesActual[idx] = valor;
+  renderObservaciones();
+}
+
+function actualizarBotonFinalizar() {
+  const todasLlenas = observacionesActual.length > 0 && observacionesActual.every(o => o !== "");
+  const confirmado = document.getElementById('confirmar-check')?.checked;
+  const btn = document.getElementById('btn-finalizar');
+  if (todasLlenas && confirmado) {
+    btn.disabled = false;
+  } else {
+    btn.disabled = true;
+  }
+}
+
 function actualizarProgreso() {
   const n = loteActual.length;
   document.getElementById('progreso-txt').textContent = `${n} / 12`;
   document.getElementById('progress-fill').style.width = `${(n/12)*100}%`;
 }
 
-function finalizarLote() {
-  if (loteActual.length === 0) { showToast('No hay medidores registrados'); return; }
-  if (!document.getElementById('confirmar-check').checked) { showToast('Confirma la supervisión primero'); return; }
+async function finalizarLote() {
+  if (loteActual.length === 0) { showToast('No hay medidores'); return; }
+  if (!observacionesActual.every(o => o !== "")) { showToast('Faltan observaciones'); return; }
+  if (!document.getElementById('confirmar-check').checked) { showToast('Confirma la supervisión'); return; }
+
   const operario = document.getElementById('operario-select').value;
   const lote = getLote();
   const fecha = getFecha();
-  historial.push({lote, fecha, operario, medidores: loteActual});
+
+  historial.push({lote, fecha, operario, medidores: loteActual, observaciones: observacionesActual});
   localStorage.setItem('metrilab_historial', JSON.stringify(historial));
-  generarCSV(loteActual, operario, fecha, lote);
-  showToast('Lote guardado y archivo descargado');
+
+  showToast('Generando reporte...');
+  await generarZIP(loteActual, fotosActual, observacionesActual, operario, fecha, lote);
+
   loteActual = [];
+  fotosActual = [];
+  observacionesActual = [];
   document.getElementById('resultado-actual').innerHTML = '';
-  document.getElementById('btn-finalizar').style.display = 'none';
+  document.getElementById('seccion-observaciones').style.display = 'none';
   document.getElementById('confirmar-check').checked = false;
   actualizarProgreso();
+  iniciarRegistro();
 }
 
-function generarCSV(datos, operario, fecha, lote) {
-  let csv = `METRILAB - LABORATORIO INTELIGENTE DE MEDIDORES\n`;
+async function generarZIP(datos, fotos, observaciones, operario, fecha, lote) {
+  const zip = new JSZip();
+
+  let csv = `\ufeffMETRILAB - LABORATORIO INTELIGENTE DE MEDIDORES\n`;
   csv += `Lote:,${lote},Operario:,${operario},Fecha:,${fecha}\n\n`;
-  csv += `#,Marca,Modelo,Nro. Serie Medidor,Volumen Ciclico,Tipo,Color,Nro. Serie Precinto,Registro Inicial,Estado\n`;
-  datos.forEach((d,i) => {
-    csv += `${i+1},${d.marca},${d.modelo},${d.serie_medidor},${d.volumen_ciclico},Circular,Verde,${d.serie_precinto||'N/D'},"${d.registro} ${d.unidad}",OK\n`;
+  csv += `#,Marca,Modelo,Nro. Serie Medidor,Vol. Ciclico,Tipo,Color,Nro. Serie Precinto,Registro Inicial,Foto,Observacion\n`;
+  datos.forEach((d, i) => {
+    const nombreImg = `${String(i+1).padStart(2,'0')}_${d.serie_medidor}.png`;
+    csv += `${i+1},${d.marca||'METREX'},${d.modelo||'G1.6'},${d.serie_medidor},0.7 dm³,Circular,Verde,${d.serie_precinto||'N/D'},"${d.registro} m³",imagenes/${nombreImg},${observaciones[i]}\n`;
   });
   csv += `\nCertifico que el proceso fue supervisado correctamente — ${operario} — ${fecha}\n`;
-  const blob = new Blob(['\ufeff'+csv], {type:'text/csv;charset=utf-8'});
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url; a.download = `MetriLab_${lote}.csv`; a.click();
-}
 
-function exportarHistorial() {
-  if (historial.length === 0) { showToast('No hay datos para exportar'); return; }
-  let csv = `METRILAB - HISTORIAL COMPLETO\n\n`;
-  historial.forEach(l => {
-    csv += `Lote:,${l.lote},Operario:,${l.operario},Fecha:,${l.fecha}\n`;
-    csv += `#,Marca,Modelo,Serie Medidor,Vol. Ciclico,Tipo,Color,Serie Precinto,Registro\n`;
-    l.medidores.forEach((d,i) => { csv += `${i+1},${d.marca},${d.modelo},${d.serie_medidor},${d.volumen_ciclico},Circular,Verde,${d.serie_precinto||'N/D'},"${d.registro} ${d.unidad}"\n`; });
-    csv += '\n';
-  });
-  const blob = new Blob(['\ufeff'+csv], {type:'text/csv;charset=utf-8'});
+  zip.file(`Reporte_${lote}.csv`, csv);
+
+  const imgFolder = zip.folder("imagenes");
+  for (let i = 0; i < fotos.length; i++) {
+    const base64 = fotos[i].split(',')[1];
+    const nombreImg = `${String(i+1).padStart(2,'0')}_${datos[i].serie_medidor}.png`;
+    imgFolder.file(nombreImg, base64, {base64: true});
+  }
+
+  const blob = await zip.generateAsync({type:'blob'});
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
-  a.href = url; a.download = `MetriLab_Historial.csv`; a.click();
+  a.href = url;
+  a.download = `MetriLab_${lote}.zip`;
+  a.click();
 }
 
 function limpiarDatos() {
-  if (confirm('¿Eliminar todos los datos? Esta acción no se puede deshacer.')) {
+  if (confirm('¿Eliminar todos los datos?')) {
     historial = [];
+    contadorLoteDia = {};
     localStorage.removeItem('metrilab_historial');
+    localStorage.removeItem('metrilab_contador');
     actualizarAdmin();
     showToast('Datos eliminados');
   }
