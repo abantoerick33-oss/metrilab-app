@@ -7,6 +7,7 @@
   <title>MetriLab</title>
   <link rel="manifest" href="manifest.json">
   <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f8fafc; color: #1e293b; }
@@ -46,8 +47,6 @@
 
     .badge { display: inline-block; padding: 3px 10px; border-radius: 6px; font-size: 11px; font-weight: 500; }
     .badge-green { background: #dcfce7; color: #166534; }
-    .badge-blue { background: #dbeafe; color: #1e40af; }
-    .badge-yellow { background: #fef9c3; color: #854d0e; }
 
     .lote-row { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid #f1f5f9; }
     .lote-row:last-child { border: none; }
@@ -103,7 +102,6 @@
 </head>
 <body>
 
-<!-- SETUP -->
 <div class="setup-screen" id="setup-screen">
   <div class="setup-logo">
     <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 14H9V8h2v8zm4 0h-2V8h2v8z"/></svg>
@@ -119,9 +117,7 @@
       <option value="Joseph Erik Abanto Guerra">Joseph Erik Abanto Guerra</option>
       <option value="Marco David Rodríguez Valencia">Marco David Rodríguez Valencia</option>
     </select>
-    <button class="btn-primary" onclick="guardarConfiguracion()">
-      Comenzar
-    </button>
+    <button class="btn-primary" onclick="guardarConfiguracion()">Comenzar</button>
   </div>
 </div>
 
@@ -141,7 +137,6 @@
 
   <div class="toast" id="toast"></div>
 
-  <!-- INICIO -->
   <div class="screen active" id="screen-inicio">
     <p class="greeting" id="greeting">Bienvenido</p>
     <div class="grid2">
@@ -164,7 +159,6 @@
     </div>
   </div>
 
-  <!-- REGISTRO -->
   <div class="screen" id="screen-registro">
     <div class="card" style="margin-bottom:12px">
       <div class="metric-label">Operario</div>
@@ -213,13 +207,11 @@
     </div>
   </div>
 
-  <!-- HISTORIAL -->
   <div class="screen" id="screen-historial">
     <div class="section-title">Historial de lotes</div>
     <div id="historial-lista"><p style="font-size:13px;color:#94a3b8;text-align:center;padding:20px">No hay lotes registrados aún</p></div>
   </div>
 
-  <!-- ADMIN -->
   <div class="screen" id="screen-admin">
     <div class="card" style="margin-bottom:12px">
       <div class="section-title">Estadísticas generales</div>
@@ -353,8 +345,7 @@ function getFecha() {
 }
 
 function getFechaISO() {
-  const d = new Date().toLocaleString('en-CA', {timeZone:'America/Lima'}).split(',')[0];
-  return d;
+  return new Date().toLocaleString('en-CA', {timeZone:'America/Lima'}).split(',')[0];
 }
 
 function getLote() {
@@ -518,11 +509,7 @@ function actualizarBotonFinalizar() {
   const todasLlenas = observacionesActual.length > 0 && observacionesActual.every(o => o !== "");
   const confirmado = document.getElementById('confirmar-check')?.checked;
   const btn = document.getElementById('btn-finalizar');
-  if (todasLlenas && confirmado) {
-    btn.disabled = false;
-  } else {
-    btn.disabled = true;
-  }
+  btn.disabled = !(todasLlenas && confirmado);
 }
 
 function actualizarProgreso() {
@@ -557,24 +544,224 @@ async function finalizarLote() {
 }
 
 async function generarZIP(datos, fotos, observaciones, operario, fecha, lote) {
-  const zip = new JSZip();
+  const wb = new ExcelJS.Workbook();
+  const ws = wb.addWorksheet('Registro');
 
-  let csv = `\ufeffMETRILAB - LABORATORIO INTELIGENTE DE MEDIDORES\n`;
-  csv += `Lote:,${lote},Operario:,${operario},Fecha:,${fecha}\n\n`;
-  csv += `#,Marca,Modelo,Nro. Serie Medidor,Vol. Ciclico,Tipo,Color,Nro. Serie Precinto,Registro Inicial,Foto,Observacion\n`;
-  datos.forEach((d, i) => {
-    const nombreImg = `${String(i+1).padStart(2,'0')}_${d.serie_medidor}.png`;
-    csv += `${i+1},${d.marca||'METREX'},${d.modelo||'G1.6'},${d.serie_medidor},0.7 dm³,Circular,Verde,${d.serie_precinto||'N/D'},"${d.registro} m³",imagenes/${nombreImg},${observaciones[i]}\n`;
+  const AZUL = '17375E';
+  const AZUL_CLARO = 'D9EAF7';
+  const VERDE = '2E8B57';
+  const VERDE_CLARO = 'EAF7EE';
+  const ROJO = 'C0392B';
+  const GRIS = 'F4F6F7';
+  const BLANCO = 'FFFFFF';
+  const AMARILLO = 'FCF3CF';
+  const AZUL_LINK = '1E40AF';
+
+  const borde = {
+    top: {style:'thin'}, left: {style:'thin'},
+    bottom: {style:'thin'}, right: {style:'thin'}
+  };
+  const bordeMedio = {
+    top: {style:'medium'}, left: {style:'medium'},
+    bottom: {style:'medium'}, right: {style:'medium'}
+  };
+
+  const total = datos.length;
+  const anchos = [5, 10, 10, 16, 11, 10, 10, 16, 16, 10, 33, 5, 14, 5, 12, 8, 2.11];
+  anchos.forEach((a, i) => { ws.getColumn(i+1).width = a; });
+
+  function aplicar(celda, valor, opts={}) {
+    const c = ws.getCell(celda);
+    c.value = valor;
+    c.font = {
+      bold: opts.negrita || false,
+      size: opts.tam || 10,
+      color: {argb: 'FF' + (opts.color_texto || '000000')},
+      italic: opts.italica || false
+    };
+    c.alignment = {
+      horizontal: opts.alineacion || 'center',
+      vertical: 'middle',
+      wrapText: opts.wrap !== false
+    };
+    if (opts.color_fondo) {
+      c.fill = {type:'pattern', pattern:'solid', fgColor:{argb:'FF'+opts.color_fondo}};
+    }
+    c.border = opts.borde || borde;
+  }
+
+  ws.mergeCells('A1:Q1');
+  aplicar('A1', 'LABORATORIO DE MEDIDORES DE GAS', {
+    negrita:true, tam:18, color_texto:BLANCO, color_fondo:AZUL, borde:bordeMedio
   });
-  csv += `\nCertifico que el proceso fue supervisado correctamente — ${operario} — ${fecha}\n`;
+  ws.getRow(1).height = 35;
 
-  zip.file(`Reporte_${lote}.csv`, csv);
+  ws.mergeCells('A2:Q2');
+  aplicar('A2', 'Reporte automático de inspección y registro de medidores', {
+    tam:10, italica:true, color_texto:'404040', color_fondo:GRIS
+  });
+  ws.getRow(2).height = 18;
+
+  ws.mergeCells('A3:D3');
+  aplicar('A3', `👤 Operario: ${operario}`, {
+    negrita:true, color_fondo:AZUL_CLARO, alineacion:'left'
+  });
+  ws.mergeCells('E3:J3');
+  aplicar('E3', `📅 Fecha: ${fecha}`, {
+    negrita:true, color_fondo:AZUL_CLARO
+  });
+  ws.mergeCells('K3:Q3');
+  aplicar('K3', `🏷 Lote: ${lote}`, {
+    negrita:true, color_texto:BLANCO, color_fondo:AZUL
+  });
+  ws.getRow(3).height = 22;
+  ws.getRow(4).height = 6;
+
+  const marcaT = datos[0]?.marca || 'METREX';
+  const modeloT = datos[0]?.modelo || 'G1.6';
+  const tarjetas = [
+    ['A5:D6', 'TOTAL DE\nMEDIDORES', String(total), AZUL_CLARO],
+    ['E5:H6', 'MARCA DEL\nLOTE', marcaT, VERDE_CLARO],
+    ['I5:L6', 'MODELO', modeloT, 'F4ECF7'],
+    ['M5:Q6', 'ESTADO DEL\nLOTE', 'APROBADO', VERDE_CLARO]
+  ];
+  tarjetas.forEach(([rango, titulo, valor, color]) => {
+    ws.mergeCells(rango);
+    const celdaInicio = rango.split(':')[0];
+    aplicar(celdaInicio, `${titulo}\n\n${valor}`, {
+      negrita:true, tam:11, color_fondo:color, borde:bordeMedio
+    });
+  });
+  ws.getRow(5).height = 28;
+  ws.getRow(6).height = 28;
+  ws.getRow(7).height = 6;
+
+  ws.mergeCells('A8:K8');
+  aplicar('A8', 'RESUMEN DE MEDIDORES DEL LOTE', {
+    negrita:true, tam:11, color_texto:BLANCO, color_fondo:AZUL
+  });
+  ws.getRow(8).height = 22;
+
+  const cols = ['#','Marca','Modelo','Nro. Serie Medidor','Vol. Cíclico',
+                'Tipo','Color','Nro. Serie Precinto','Registro Inicial (m³)','Foto','Observación'];
+  cols.forEach((h, i) => {
+    aplicar(ws.getCell(9, i+1).address, h, {
+      negrita:true, tam:9, color_texto:BLANCO, color_fondo:ROJO
+    });
+  });
+  ws.getRow(9).height = 26.4;
+
+  const nombresImagenes = datos.map((d, i) =>
+    `${String(i+1).padStart(2,'0')}_${d.serie_medidor}.png`
+  );
+
+  datos.forEach((d, i) => {
+    const fila = 10 + i;
+    const colorFila = i % 2 === 0 ? GRIS : BLANCO;
+    const obs = observaciones[i] || 'NINGUNA';
+    const marca = d.marca || 'METREX';
+    const modelo = d.modelo || 'G1.6';
+    const valores = [
+      i+1, marca, modelo, d.serie_medidor,
+      '0.7 dm³', 'Circular', 'Verde',
+      d.serie_precinto || 'N/D',
+      `${d.registro} m³`, '', obs
+    ];
+    valores.forEach((v, j) => {
+      const col = j + 1;
+      let fondo = colorFila;
+      if (col === 11 && obs !== 'NINGUNA') fondo = 'FDEDEC';
+      aplicar(ws.getCell(fila, col).address, v, {tam:9, color_fondo:fondo});
+      if (col === 11) {
+        ws.getCell(fila, col).alignment = {horizontal:'center', vertical:'middle', wrapText:false};
+      }
+    });
+    const cLink = ws.getCell(fila, 10);
+    cLink.value = {text: `📷 Ver foto ${i+1}`, hyperlink: `imagenes/${nombresImagenes[i]}`};
+    cLink.font = {bold:true, size:9, color:{argb:'FF'+AZUL_LINK}, underline:true};
+    cLink.alignment = {horizontal:'center', vertical:'middle'};
+    cLink.fill = {type:'pattern', pattern:'solid', fgColor:{argb:'FF'+VERDE_CLARO}};
+    cLink.border = borde;
+    ws.getRow(fila).height = 16;
+  });
+
+  ws.mergeCells('L8:Q8');
+  aplicar('L8', 'DETALLES DEL LOTE', {
+    negrita:true, tam:11, color_texto:BLANCO, color_fondo:AZUL
+  });
+
+  const detalles = [
+    ['Lote:', lote],
+    ['Fecha y hora:', fecha],
+    ['Operario:', operario],
+    ['Marca:', marcaT],
+    ['Modelo:', modeloT],
+    ['Tipo:', 'Circular'],
+    ['Vol. Cíclico:', '0.7 dm³ (fijo)'],
+    ['Color:', 'Verde'],
+    ['Total medidores:', String(total)],
+    ['Supervisados:', `${total} (100%)`]
+  ];
+  detalles.forEach(([k, v], i) => {
+    const f = 9 + i;
+    ws.mergeCells(`L${f}:M${f}`);
+    aplicar(`L${f}`, k, {negrita:true, tam:8, color_fondo:AZUL_CLARO, alineacion:'left'});
+    ws.mergeCells(`N${f}:Q${f}`);
+    aplicar(`N${f}`, v, {tam:8, color_fondo:BLANCO, alineacion:'left'});
+    ws.getRow(f).height = 16;
+  });
+
+  const certFila = 9 + detalles.length + 1;
+  ws.mergeCells(`L${certFila}:Q${certFila+2}`);
+  aplicar(`L${certFila}`,
+    `Certifico que el proceso fue supervisado correctamente\n— ${operario} —\n${fecha}`,
+    {negrita:true, italica:true, tam:8, color_fondo:VERDE_CLARO, borde:bordeMedio}
+  );
+  ws.getRow(certFila).height = 18;
+  ws.getRow(certFila+1).height = 18;
+  ws.getRow(certFila+2).height = 18;
+
+  const estFila = certFila + 4;
+  ws.mergeCells(`L${estFila}:Q${estFila}`);
+  aplicar(`L${estFila}`, 'RESUMEN DE OBSERVACIONES', {
+    negrita:true, tam:10, color_texto:BLANCO, color_fondo:VERDE
+  });
+  ws.getRow(estFila).height = 20;
+
+  const sinObs = observaciones.filter(o => o === 'NINGUNA').length;
+  const conObs = total - sinObs;
+  const stats = [
+    ['Sin observación', sinObs, VERDE_CLARO],
+    ['Con observación', conObs, AMARILLO]
+  ];
+  stats.forEach(([n, v, c], i) => {
+    const fr = estFila + 1 + i;
+    ws.mergeCells(`L${fr}:N${fr}`);
+    aplicar(`L${fr}`, n, {tam:9, color_fondo:c});
+    ws.mergeCells(`O${fr}:Q${fr}`);
+    aplicar(`O${fr}`, `${v} (${total ? Math.round(v/total*100) : 0}%)`, {
+      negrita:true, tam:9, color_fondo:c
+    });
+    ws.getRow(fr).height = 16;
+  });
+
+  const infoFila = 10 + total + 2;
+  ws.mergeCells(`A${infoFila}:K${infoFila}`);
+  aplicar(`A${infoFila}`,
+    '💡 Las fotos están en la carpeta \'imagenes/\'. Haz clic en cada enlace para abrirlas.',
+    {tam:10, italica:true, color_texto:'404040', color_fondo:AMARILLO}
+  );
+  ws.getRow(infoFila).height = 22;
+
+  const excelBuffer = await wb.xlsx.writeBuffer();
+
+  const zip = new JSZip();
+  zip.file(`Reporte_${lote}.xlsx`, excelBuffer);
 
   const imgFolder = zip.folder("imagenes");
   for (let i = 0; i < fotos.length; i++) {
     const base64 = fotos[i].split(',')[1];
-    const nombreImg = `${String(i+1).padStart(2,'0')}_${datos[i].serie_medidor}.png`;
-    imgFolder.file(nombreImg, base64, {base64: true});
+    imgFolder.file(nombresImagenes[i], base64, {base64: true});
   }
 
   const blob = await zip.generateAsync({type:'blob'});
