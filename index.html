@@ -854,7 +854,12 @@ function renderObservaciones() {
   const cont = document.getElementById('lista-observaciones');
   cont.innerHTML = loteActual.map((d, i) => `
     <div class="medidor-item">
-      <div class="medidor-num">#${i+1}</div>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+        <div class="medidor-num">#${i+1}</div>
+        <button onclick="eliminarMedidor(${i})" style="background:rgba(220,38,38,0.2);border:1px solid rgba(220,38,38,0.4);color:#fca5a5;padding:4px 10px;border-radius:6px;font-size:11px;cursor:pointer">
+          🗑️ Eliminar
+        </button>
+      </div>
       <div class="medidor-data">Serie: ${d.serie_medidor} · Registro: ${d.registro} ${d.unidad}</div>
       <select class="medidor-select ${observacionesActual[i]?'':'empty'}" onchange="cambiarObservacion(${i}, this.value)">
         <option value="">— Selecciona observación —</option>
@@ -863,6 +868,21 @@ function renderObservaciones() {
     </div>
   `).join('');
   actualizarBotonFinalizar();
+}
+
+function eliminarMedidor(idx) {
+  if (!confirm(`¿Eliminar el medidor #${idx+1}?`)) return;
+  loteActual.splice(idx, 1);
+  fotosActual.splice(idx, 1);
+  observacionesActual.splice(idx, 1);
+  actualizarProgreso();
+  if (loteActual.length === 0) {
+    document.getElementById('resultado-actual').innerHTML = '';
+    document.getElementById('seccion-observaciones').style.display = 'none';
+  } else {
+    renderObservaciones();
+  }
+  showToast('Medidor eliminado');
 }
 
 function cambiarObservacion(idx, valor) {
