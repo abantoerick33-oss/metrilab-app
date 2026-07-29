@@ -630,6 +630,38 @@
   </nav>
 </div>
 
+<script type="module">
+  // ===== Conexión a Firebase (base de datos compartida para el dashboard del jefe) =====
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-app.js";
+  import { getFirestore, collection, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js";
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyCpRopyllFTQu3puQtRlLWAy83JXXgvXI0",
+    authDomain: "metrilab-appjefe.firebaseapp.com",
+    projectId: "metrilab-appjefe",
+    storageBucket: "metrilab-appjefe.firebasestorage.app",
+    messagingSenderId: "407817648389",
+    appId: "1:407817648389:web:425dcf5f446ecd3a2f5f6c"
+  };
+
+  const firebaseApp = initializeApp(firebaseConfig);
+  const db = getFirestore(firebaseApp);
+
+  window.subirLoteAFirebase = async function (loteData) {
+    try {
+      await addDoc(collection(db, "lotes"), {
+        ...loteData,
+        creado: serverTimestamp()
+      });
+      console.log("Lote sincronizado con Firebase:", loteData.lote);
+      return true;
+    } catch (error) {
+      console.error("No se pudo sincronizar con Firebase (revisa tu conexión):", error);
+      return false;
+    }
+  };
+</script>
+
 <script>
 const OBSERVACIONES = [
   "NINGUNA","PRESENCIA DE CORROSIÓN SOBRE MEDIDOR","PRESENCIA DE GOLPE SOBRE MEDIDOR",
@@ -913,6 +945,25 @@ async function finalizarLote() {
 
   historial.push({lote, fecha, operario, medidores: loteActual, observaciones: observacionesActual});
   localStorage.setItem('metrilab_historial', JSON.stringify(historial));
+
+  // ===== Sincronizar el lote con Firebase (para la app del jefe) =====
+  if (window.subirLoteAFirebase) {
+    const loteFirebase = {
+      lote,
+      fecha,
+      operario,
+      cantidadMedidores: loteActual.length,
+      medidores: loteActual.map((d, i) => ({
+        serie_medidor: d.serie_medidor || null,
+        marca: d.marca || 'METREX',
+        modelo: d.modelo || 'G1.6',
+        registro: d.registro || null,
+        serie_precinto: d.serie_precinto || null,
+        observacion: observacionesActual[i] || 'NINGUNA'
+      }))
+    };
+    window.subirLoteAFirebase(loteFirebase);
+  }
 
   showToast('✨ Generando reporte...');
   await generarZIP(loteActual, fotosActual, observacionesActual, operario, fecha, lote);
