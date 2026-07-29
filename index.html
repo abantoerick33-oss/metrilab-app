@@ -17,8 +17,6 @@
       min-height: 100vh;
       overflow-x: hidden;
     }
-
-    /* Fondo con gradiente radial + partículas */
     body::before {
       content: '';
       position: fixed;
@@ -36,390 +34,93 @@
       z-index: -1;
       pointer-events: none;
     }
-
     #app { max-width: 430px; margin: 0 auto; min-height: 100vh; position: relative; padding-bottom: 90px; }
-
-    /* TOPBAR */
-    .topbar {
-      padding: 20px 20px 10px;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-    }
-    .topbar-title {
-      font-size: 24px;
-      font-weight: bold;
-      background: linear-gradient(135deg, #9B59F6, #00D4FF);
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-      background-clip: text;
-    }
+    .topbar { padding: 20px 20px 10px; display: flex; align-items: center; justify-content: space-between; }
+    .topbar-title { font-size: 24px; font-weight: bold; background: linear-gradient(135deg, #9B59F6, #00D4FF); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
     .topbar-icons { display: flex; gap: 12px; }
     .topbar-icons svg { width: 22px; height: 22px; fill: rgba(255,255,255,0.6); cursor: pointer; }
-
-    /* GLASS CARD */
-    .glass-card {
-      background: linear-gradient(135deg, rgba(26, 26, 46, 0.7), rgba(42, 26, 62, 0.3));
-      backdrop-filter: blur(10px);
-      -webkit-backdrop-filter: blur(10px);
-      border: 1px solid rgba(58, 46, 93, 0.3);
-      border-radius: 20px;
-      padding: 20px;
-      margin-bottom: 16px;
-      box-shadow: 0 0 30px rgba(155, 89, 246, 0.1);
-    }
-    .glass-card-sm {
-      background: linear-gradient(135deg, rgba(26, 26, 46, 0.5), rgba(10, 10, 15, 0.5));
-      border-radius: 16px;
-      padding: 16px;
-    }
-
-    /* SCREENS */
+    .glass-card { background: linear-gradient(135deg, rgba(26, 26, 46, 0.7), rgba(42, 26, 62, 0.3)); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border: 1px solid rgba(58, 46, 93, 0.3); border-radius: 20px; padding: 20px; margin-bottom: 16px; box-shadow: 0 0 30px rgba(155, 89, 246, 0.1); }
+    .glass-card-sm { background: linear-gradient(135deg, rgba(26, 26, 46, 0.5), rgba(10, 10, 15, 0.5)); border-radius: 16px; padding: 16px; }
     .screen { display: none; padding: 0 20px; }
     .screen.active { display: block; }
-
-    /* GREETING */
     .greeting-title { font-size: 22px; font-weight: bold; margin-bottom: 8px; }
     .greeting-sub { color: rgba(255,255,255,0.6); font-size: 14px; margin-bottom: 16px; }
-
-    /* PROGRESS BAR */
     .progress-label { display: flex; justify-content: space-between; margin-bottom: 6px; }
     .progress-label span:first-child { color: rgba(255,255,255,0.6); font-size: 12px; }
     .progress-label span:last-child { color: #00D4FF; font-size: 12px; font-weight: bold; }
-    .progress-track {
-      height: 6px;
-      background: rgba(255,255,255,0.1);
-      border-radius: 10px;
-      overflow: hidden;
-    }
-    .progress-fill {
-      height: 100%;
-      background: linear-gradient(90deg, #9B59F6, #00D4FF);
-      border-radius: 10px;
-      box-shadow: 0 0 10px rgba(155, 89, 246, 0.5);
-      transition: width 0.3s;
-    }
-
-    /* MÉTRICAS */
+    .progress-track { height: 6px; background: rgba(255,255,255,0.1); border-radius: 10px; overflow: hidden; }
+    .progress-fill { height: 100%; background: linear-gradient(90deg, #9B59F6, #00D4FF); border-radius: 10px; box-shadow: 0 0 10px rgba(155, 89, 246, 0.5); transition: width 0.3s; }
     .metrics-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 20px; }
-    .metric-card {
-      padding: 16px;
-      background: linear-gradient(135deg, rgba(26, 26, 46, 0.5), rgba(10, 10, 15, 0.5));
-      border-radius: 16px;
-      border: 1px solid rgba(155, 89, 246, 0.2);
-      text-align: center;
-    }
+    .metric-card { padding: 16px; background: linear-gradient(135deg, rgba(26, 26, 46, 0.5), rgba(10, 10, 15, 0.5)); border-radius: 16px; border: 1px solid rgba(155, 89, 246, 0.2); text-align: center; }
     .metric-card.cyan { border-color: rgba(0, 212, 255, 0.2); }
     .metric-icon { width: 28px; height: 28px; margin: 0 auto 8px; }
     .metric-icon.purple { color: #9B59F6; }
     .metric-icon.cyan { color: #00D4FF; }
     .metric-val { font-size: 28px; font-weight: bold; color: white; }
     .metric-label { color: rgba(255,255,255,0.6); font-size: 12px; }
-
-    /* BOTONES */
-    .btn-glow {
-      width: 100%;
-      height: 60px;
-      background: linear-gradient(135deg, #9B59F6, #00D4FF);
-      border: none;
-      border-radius: 16px;
-      color: white;
-      font-weight: bold;
-      font-size: 16px;
-      letter-spacing: 1.2px;
-      cursor: pointer;
-      box-shadow: 0 0 30px rgba(155, 89, 246, 0.4);
-      animation: glow-pulse 2s ease-in-out infinite;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 10px;
-      margin-bottom: 20px;
-    }
-    @keyframes glow-pulse {
-      0%, 100% { box-shadow: 0 0 30px rgba(155, 89, 246, 0.4); }
-      50% { box-shadow: 0 0 50px rgba(155, 89, 246, 0.7), 0 0 80px rgba(0, 212, 255, 0.3); }
-    }
+    .btn-glow { width: 100%; height: 60px; background: linear-gradient(135deg, #9B59F6, #00D4FF); border: none; border-radius: 16px; color: white; font-weight: bold; font-size: 16px; letter-spacing: 1.2px; cursor: pointer; box-shadow: 0 0 30px rgba(155, 89, 246, 0.4); animation: glow-pulse 2s ease-in-out infinite; display: flex; align-items: center; justify-content: center; gap: 10px; margin-bottom: 20px; }
+    @keyframes glow-pulse { 0%, 100% { box-shadow: 0 0 30px rgba(155, 89, 246, 0.4); } 50% { box-shadow: 0 0 50px rgba(155, 89, 246, 0.7), 0 0 80px rgba(0, 212, 255, 0.3); } }
     .btn-glow:disabled { opacity: 0.5; animation: none; cursor: not-allowed; }
-
-    .btn-secondary {
-      width: 100%;
-      padding: 14px;
-      background: rgba(155, 89, 246, 0.15);
-      border: 1px solid rgba(155, 89, 246, 0.3);
-      border-radius: 12px;
-      color: #9B59F6;
-      font-size: 13px;
-      font-weight: 500;
-      cursor: pointer;
-      margin-bottom: 8px;
-    }
-    .btn-red {
-      width: 100%;
-      padding: 12px;
-      background: rgba(220, 38, 38, 0.2);
-      border: 1px solid rgba(220, 38, 38, 0.4);
-      border-radius: 12px;
-      color: #fca5a5;
-      font-size: 13px;
-      cursor: pointer;
-    }
-
-    /* SECTION */
+    .btn-secondary { width: 100%; padding: 14px; background: rgba(155, 89, 246, 0.15); border: 1px solid rgba(155, 89, 246, 0.3); border-radius: 12px; color: #9B59F6; font-size: 13px; font-weight: 500; cursor: pointer; margin-bottom: 8px; }
+    .btn-red { width: 100%; padding: 12px; background: rgba(220, 38, 38, 0.2); border: 1px solid rgba(220, 38, 38, 0.4); border-radius: 12px; color: #fca5a5; font-size: 13px; cursor: pointer; }
     .section-title { font-size: 18px; font-weight: bold; color: white; margin-bottom: 16px; }
     .section-title-sm { font-size: 13px; font-weight: 600; color: rgba(255,255,255,0.9); margin-bottom: 10px; }
-
-    /* EMPTY STATE */
-    .empty-state {
-      padding: 30px;
-      border: 1px solid rgba(58, 46, 93, 0.3);
-      border-radius: 12px;
-      text-align: center;
-    }
+    .empty-state { padding: 30px; border: 1px solid rgba(58, 46, 93, 0.3); border-radius: 12px; text-align: center; }
     .empty-state svg { width: 40px; height: 40px; fill: #3A2E5D; margin: 0 auto 8px; }
     .empty-state p { color: #B8B8D0; font-size: 14px; }
     .empty-state span { color: #B8B8D0; font-size: 12px; }
-
-    /* LOTE ROW */
-    .lote-row {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      padding: 12px 0;
-      border-bottom: 1px solid rgba(58, 46, 93, 0.2);
-    }
+    .lote-row { display: flex; justify-content: space-between; align-items: center; padding: 12px 0; border-bottom: 1px solid rgba(58, 46, 93, 0.2); }
     .lote-row:last-child { border: none; }
     .lote-title { font-size: 13px; font-weight: 500; color: white; }
     .lote-sub { font-size: 11px; color: rgba(255,255,255,0.5); margin-top: 2px; }
-
-    .badge {
-      display: inline-block;
-      padding: 4px 10px;
-      border-radius: 8px;
-      font-size: 11px;
-      font-weight: 500;
-      background: rgba(0, 212, 255, 0.15);
-      color: #00D4FF;
-      border: 1px solid rgba(0, 212, 255, 0.3);
-    }
-
-    /* CAMERA BOX */
-    .camera-box {
-      background: linear-gradient(135deg, rgba(155, 89, 246, 0.2), rgba(0, 212, 255, 0.1));
-      border: 2px dashed rgba(155, 89, 246, 0.4);
-      border-radius: 20px;
-      padding: 30px 20px;
-      text-align: center;
-      cursor: pointer;
-      margin-bottom: 16px;
-      transition: all 0.3s;
-    }
+    .badge { display: inline-block; padding: 4px 10px; border-radius: 8px; font-size: 11px; font-weight: 500; background: rgba(0, 212, 255, 0.15); color: #00D4FF; border: 1px solid rgba(0, 212, 255, 0.3); }
+    .camera-box { background: linear-gradient(135deg, rgba(155, 89, 246, 0.2), rgba(0, 212, 255, 0.1)); border: 2px dashed rgba(155, 89, 246, 0.4); border-radius: 20px; padding: 30px 20px; text-align: center; cursor: pointer; margin-bottom: 16px; transition: all 0.3s; }
     .camera-box:active { transform: scale(0.98); }
     .camera-box svg { width: 48px; height: 48px; fill: white; margin-bottom: 12px; filter: drop-shadow(0 0 10px rgba(155, 89, 246, 0.5)); }
     .camera-box p { color: white; font-size: 14px; font-weight: 500; }
     .camera-box span { color: rgba(255,255,255,0.5); font-size: 12px; }
-
-    /* SELECTS */
-    .select-box {
-      background: rgba(26, 26, 46, 0.6);
-      border: 1px solid rgba(58, 46, 93, 0.5);
-      border-radius: 10px;
-      padding: 12px;
-      color: white;
-      width: 100%;
-      margin-bottom: 12px;
-      font-size: 13px;
-    }
-    .input-box {
-      background: rgba(26, 26, 46, 0.6);
-      border: 1px solid rgba(58, 46, 93, 0.5);
-      border-radius: 10px;
-      padding: 12px;
-      color: white;
-      width: 100%;
-      margin-bottom: 10px;
-      font-size: 13px;
-    }
-
-    /* RESULTADO */
-    .resultado {
-      background: linear-gradient(135deg, rgba(0, 212, 255, 0.1), rgba(155, 89, 246, 0.05));
-      border: 1px solid rgba(0, 212, 255, 0.3);
-      border-radius: 16px;
-      padding: 16px;
-      margin-bottom: 16px;
-    }
+    .select-box { background: rgba(26, 26, 46, 0.6); border: 1px solid rgba(58, 46, 93, 0.5); border-radius: 10px; padding: 12px; color: white; width: 100%; margin-bottom: 12px; font-size: 13px; }
+    .input-box { background: rgba(26, 26, 46, 0.6); border: 1px solid rgba(58, 46, 93, 0.5); border-radius: 10px; padding: 12px; color: white; width: 100%; margin-bottom: 10px; font-size: 13px; }
+    .resultado { background: linear-gradient(135deg, rgba(0, 212, 255, 0.1), rgba(155, 89, 246, 0.05)); border: 1px solid rgba(0, 212, 255, 0.3); border-radius: 16px; padding: 16px; margin-bottom: 16px; }
     .resultado-title { font-size: 12px; color: #00D4FF; font-weight: bold; margin-bottom: 10px; }
     .resultado-row { display: flex; justify-content: space-between; font-size: 12px; padding: 4px 0; }
     .resultado-key { color: rgba(255,255,255,0.5); }
     .resultado-val { color: white; font-weight: 500; }
-
-    /* OBSERVACIONES */
-    .medidor-item {
-      background: rgba(26, 26, 46, 0.6);
-      border: 1px solid rgba(58, 46, 93, 0.3);
-      border-radius: 12px;
-      padding: 12px;
-      margin-bottom: 10px;
-    }
-    .medidor-num {
-      display: inline-block;
-      background: linear-gradient(135deg, #9B59F6, #00D4FF);
-      color: white;
-      padding: 3px 10px;
-      border-radius: 8px;
-      font-size: 11px;
-      font-weight: 600;
-      margin-bottom: 8px;
-    }
+    .medidor-item { background: rgba(26, 26, 46, 0.6); border: 1px solid rgba(58, 46, 93, 0.3); border-radius: 12px; padding: 12px; margin-bottom: 10px; }
+    .medidor-num { display: inline-block; background: linear-gradient(135deg, #9B59F6, #00D4FF); color: white; padding: 3px 10px; border-radius: 8px; font-size: 11px; font-weight: 600; margin-bottom: 8px; }
     .medidor-data { font-size: 11px; color: rgba(255,255,255,0.6); margin-bottom: 8px; }
-    .medidor-select {
-      width: 100%;
-      padding: 10px;
-      font-size: 12px;
-      background: rgba(10, 10, 15, 0.6);
-      border: 1px solid rgba(58, 46, 93, 0.5);
-      border-radius: 8px;
-      color: white;
-    }
+    .medidor-select { width: 100%; padding: 10px; font-size: 12px; background: rgba(10, 10, 15, 0.6); border: 1px solid rgba(58, 46, 93, 0.5); border-radius: 8px; color: white; }
     .medidor-select.empty { border-color: rgba(245, 158, 11, 0.5); background: rgba(245, 158, 11, 0.1); }
-
-    /* CONFIRM CARD */
-    .confirm-card {
-      background: rgba(245, 158, 11, 0.1);
-      border: 1px solid rgba(245, 158, 11, 0.3);
-      border-radius: 12px;
-      padding: 12px;
-      margin-bottom: 12px;
-    }
+    .confirm-card { background: rgba(245, 158, 11, 0.1); border: 1px solid rgba(245, 158, 11, 0.3); border-radius: 12px; padding: 12px; margin-bottom: 12px; }
     .confirm-card label { display: flex; align-items: center; gap: 8px; cursor: pointer; }
     .confirm-card input { width: 18px; height: 18px; }
     .confirm-card span { font-size: 12px; color: white; }
-
-    /* NAVEGACIÓN INFERIOR */
-    .bottom-nav {
-      position: fixed;
-      bottom: 0;
-      left: 50%;
-      transform: translateX(-50%);
-      width: 100%;
-      max-width: 430px;
-      background: linear-gradient(180deg, transparent, rgba(10, 10, 15, 0.95) 30%);
-      padding: 30px 20px 20px;
-      display: flex;
-      justify-content: space-around;
-      z-index: 100;
-    }
-    .tab {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 4px;
-      background: none;
-      border: none;
-      color: rgba(255,255,255,0.4);
-      font-size: 10px;
-      cursor: pointer;
-      padding: 0;
-    }
+    .bottom-nav { position: fixed; bottom: 0; left: 50%; transform: translateX(-50%); width: 100%; max-width: 430px; background: linear-gradient(180deg, transparent, rgba(10, 10, 15, 0.95) 30%); padding: 30px 20px 20px; display: flex; justify-content: space-around; z-index: 100; }
+    .tab { display: flex; flex-direction: column; align-items: center; gap: 4px; background: none; border: none; color: rgba(255,255,255,0.4); font-size: 10px; cursor: pointer; padding: 0; }
     .tab.active { color: #9B59F6; }
-    .tab-icon {
-      width: 40px;
-      height: 40px;
-      border-radius: 50%;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      transition: background 0.3s;
-    }
+    .tab-icon { width: 40px; height: 40px; border-radius: 50%; display: flex; align-items: center; justify-content: center; transition: background 0.3s; }
     .tab.active .tab-icon { background: rgba(155, 89, 246, 0.2); }
     .tab svg { width: 22px; height: 22px; fill: currentColor; }
-
-    /* TOAST */
-    .toast {
-      position: fixed;
-      top: 80px;
-      left: 50%;
-      transform: translateX(-50%);
-      background: linear-gradient(135deg, #9B59F6, #00D4FF);
-      color: white;
-      padding: 12px 24px;
-      border-radius: 12px;
-      font-size: 13px;
-      z-index: 999;
-      display: none;
-      box-shadow: 0 0 30px rgba(155, 89, 246, 0.5);
-    }
+    .toast { position: fixed; top: 80px; left: 50%; transform: translateX(-50%); background: linear-gradient(135deg, #9B59F6, #00D4FF); color: white; padding: 12px 24px; border-radius: 12px; font-size: 13px; z-index: 999; display: none; box-shadow: 0 0 30px rgba(155, 89, 246, 0.5); }
     .toast.show { display: block; animation: fadeIn 0.3s; }
     @keyframes fadeIn { from { opacity: 0; transform: translateX(-50%) translateY(-10px); } to { opacity: 1; transform: translateX(-50%) translateY(0); } }
-
-    /* SETUP */
-    .setup-screen {
-      position: fixed;
-      inset: 0;
-      background: radial-gradient(circle at center, #1A1A2E 0%, #0A0A0F 100%);
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      padding: 24px;
-      z-index: 1000;
-    }
-    .setup-logo {
-      width: 80px;
-      height: 80px;
-      background: linear-gradient(135deg, #9B59F6, #00D4FF);
-      border-radius: 24px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      margin-bottom: 16px;
-      box-shadow: 0 0 40px rgba(155, 89, 246, 0.5);
-    }
+    .setup-screen { position: fixed; inset: 0; background: radial-gradient(circle at center, #1A1A2E 0%, #0A0A0F 100%); display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 24px; z-index: 1000; }
+    .setup-logo { width: 80px; height: 80px; background: linear-gradient(135deg, #9B59F6, #00D4FF); border-radius: 24px; display: flex; align-items: center; justify-content: center; margin-bottom: 16px; box-shadow: 0 0 40px rgba(155, 89, 246, 0.5); }
     .setup-logo svg { width: 44px; height: 44px; fill: white; }
-    .setup-title {
-      font-size: 32px;
-      font-weight: 700;
-      background: linear-gradient(135deg, #9B59F6, #00D4FF);
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-      background-clip: text;
-      margin-bottom: 4px;
-    }
+    .setup-title { font-size: 32px; font-weight: 700; background: linear-gradient(135deg, #9B59F6, #00D4FF); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; margin-bottom: 4px; }
     .setup-sub { color: rgba(255,255,255,0.6); font-size: 13px; margin-bottom: 32px; text-align: center; }
-    .setup-card {
-      background: rgba(26, 26, 46, 0.8);
-      backdrop-filter: blur(10px);
-      border: 1px solid rgba(58, 46, 93, 0.5);
-      border-radius: 20px;
-      padding: 24px;
-      width: 100%;
-      max-width: 360px;
-    }
+    .setup-card { background: rgba(26, 26, 46, 0.8); backdrop-filter: blur(10px); border: 1px solid rgba(58, 46, 93, 0.5); border-radius: 20px; padding: 24px; width: 100%; max-width: 360px; }
     .setup-label { font-size: 13px; font-weight: 600; color: white; margin-bottom: 6px; }
     .setup-hint { font-size: 11px; color: rgba(255,255,255,0.4); margin-bottom: 10px; }
-
-    /* SPINNER */
     .loading { text-align: center; padding: 20px; }
-    .spinner {
-      width: 36px;
-      height: 36px;
-      border: 3px solid rgba(155, 89, 246, 0.2);
-      border-top-color: #9B59F6;
-      border-radius: 50%;
-      animation: spin 0.8s linear infinite;
-      margin: 0 auto 10px;
-      box-shadow: 0 0 20px rgba(155, 89, 246, 0.3);
-    }
+    .spinner { width: 36px; height: 36px; border: 3px solid rgba(155, 89, 246, 0.2); border-top-color: #9B59F6; border-radius: 50%; animation: spin 0.8s linear infinite; margin: 0 auto 10px; box-shadow: 0 0 20px rgba(155, 89, 246, 0.3); }
     @keyframes spin { to { transform: rotate(360deg); } }
-
     input[type=file] { display: none; }
     input, select { font-family: inherit; }
   </style>
 </head>
 <body>
 
-<!-- SETUP -->
 <div class="setup-screen" id="setup-screen">
   <div class="setup-logo">
     <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 14H9V8h2v8zm4 0h-2V8h2v8z"/></svg>
@@ -427,9 +128,14 @@
   <div class="setup-title">MetriLab</div>
   <div class="setup-sub">Laboratorio Inteligente de Medidores</div>
   <div class="setup-card">
-    <div class="setup-label">Clave API de Gemini</div>
+    <div class="setup-label">Clave API de Gemini (obligatoria)</div>
     <div class="setup-hint">Tu clave de Google AI Studio. Se guarda solo en este dispositivo.</div>
     <input class="input-box" type="password" id="setup-key" placeholder="AQ.Ab8RN6...">
+    <div class="setup-label" style="margin-top:8px">Clave API 2 (opcional)</div>
+    <div class="setup-hint">Déjala vacía si solo tienes una clave. Ayuda a evitar el error "límite alcanzado".</div>
+    <input class="input-box" type="password" id="setup-key2" placeholder="Opcional">
+    <div class="setup-label" style="margin-top:8px">Clave API 3 (opcional)</div>
+    <input class="input-box" type="password" id="setup-key3" placeholder="Opcional">
     <div class="setup-label" style="margin-top:8px">Tu nombre</div>
     <select class="select-box" id="setup-operario">
       <option value="Joseph Erik Abanto Guerra">Joseph Erik Abanto Guerra</option>
@@ -450,7 +156,6 @@
 
   <div class="toast" id="toast"></div>
 
-  <!-- INICIO -->
   <div class="screen active" id="screen-inicio">
     <div class="glass-card">
       <div class="greeting-title" id="greeting">👋 Hola, Joseph</div>
@@ -494,7 +199,6 @@
     </div>
   </div>
 
-  <!-- REGISTRO -->
   <div class="screen" id="screen-registro">
     <div class="glass-card">
       <div class="metric-label" style="margin-bottom:8px">Operario</div>
@@ -556,7 +260,6 @@
     </div>
   </div>
 
-  <!-- HISTORIAL -->
   <div class="screen" id="screen-historial">
     <div class="section-title">📚 Historial de lotes</div>
     <div id="historial-lista">
@@ -567,7 +270,6 @@
     </div>
   </div>
 
-  <!-- ADMIN -->
   <div class="screen" id="screen-admin">
     <div class="glass-card">
       <div class="section-title">📊 Estadísticas generales</div>
@@ -603,8 +305,11 @@
 
     <div class="glass-card">
       <div class="section-title">⚙️ Configuración API</div>
-      <input class="input-box" type="password" id="nueva-key" placeholder="Nueva clave API">
-      <button class="btn-secondary" onclick="cambiarClave()">Actualizar clave</button>
+      <p style="font-size:11px;color:rgba(255,255,255,0.5);margin-bottom:10px">Usar varias claves reduce los errores de "límite alcanzado".</p>
+      <input class="input-box" type="password" id="nueva-key" placeholder="Clave 1 (obligatoria)">
+      <input class="input-box" type="password" id="nueva-key2" placeholder="Clave 2 (opcional)">
+      <input class="input-box" type="password" id="nueva-key3" placeholder="Clave 3 (opcional)">
+      <button class="btn-secondary" onclick="actualizarClaves()">Actualizar claves</button>
     </div>
 
     <button class="btn-red" onclick="limpiarDatos()">🗑️ Eliminar todos los datos</button>
@@ -631,7 +336,6 @@
 </div>
 
 <script type="module">
-  // ===== Conexión a Firebase (base de datos compartida para el dashboard del jefe) =====
   import { initializeApp } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-app.js";
   import { getFirestore, collection, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js";
 
@@ -649,10 +353,7 @@
 
   window.subirLoteAFirebase = async function (loteData) {
     try {
-      await addDoc(collection(db, "lotes"), {
-        ...loteData,
-        creado: serverTimestamp()
-      });
+      await addDoc(collection(db, "lotes"), { ...loteData, creado: serverTimestamp() });
       console.log("Lote sincronizado con Firebase:", loteData.lote);
       return true;
     } catch (error) {
@@ -695,8 +396,12 @@ Si no puedes leer pon null.`;
 
 function guardarConfiguracion() {
   const key = document.getElementById('setup-key').value.trim();
+  const key2 = document.getElementById('setup-key2').value.trim();
+  const key3 = document.getElementById('setup-key3').value.trim();
   const operario = document.getElementById('setup-operario').value;
   if (!key) { alert('Ingresa tu clave API'); return; }
+  const claves = [key, key2, key3].filter(k => k);
+  localStorage.setItem('metrilab_keys', JSON.stringify(claves));
   localStorage.setItem('metrilab_key', key);
   localStorage.setItem('metrilab_operario', operario);
   document.getElementById('setup-screen').style.display = 'none';
@@ -704,9 +409,16 @@ function guardarConfiguracion() {
   iniciarApp();
 }
 
+function getApiKeys() {
+  const multi = JSON.parse(localStorage.getItem('metrilab_keys') || '[]');
+  if (multi.length) return multi;
+  const single = localStorage.getItem('metrilab_key');
+  return single ? [single] : [];
+}
+
 function iniciarApp() {
-  const key = localStorage.getItem('metrilab_key');
-  if (!key) { document.getElementById('setup-screen').style.display = 'flex'; return; }
+  const keys = getApiKeys();
+  if (keys.length === 0) { document.getElementById('setup-screen').style.display = 'flex'; return; }
   document.getElementById('setup-screen').style.display = 'none';
   document.getElementById('app').style.display = 'block';
   const operario = localStorage.getItem('metrilab_operario') || '';
@@ -715,12 +427,18 @@ function iniciarApp() {
   actualizarInicio();
 }
 
-function cambiarClave() {
+function actualizarClaves() {
   const key = document.getElementById('nueva-key').value.trim();
-  if (!key) { showToast('Ingresa la nueva clave'); return; }
+  const key2 = document.getElementById('nueva-key2').value.trim();
+  const key3 = document.getElementById('nueva-key3').value.trim();
+  if (!key) { showToast('Ingresa al menos la clave 1'); return; }
+  const claves = [key, key2, key3].filter(k => k);
+  localStorage.setItem('metrilab_keys', JSON.stringify(claves));
   localStorage.setItem('metrilab_key', key);
   document.getElementById('nueva-key').value = '';
-  showToast('Clave actualizada');
+  document.getElementById('nueva-key2').value = '';
+  document.getElementById('nueva-key3').value = '';
+  showToast(`${claves.length} clave(s) actualizada(s)`);
 }
 
 function getFecha() {
@@ -782,7 +500,7 @@ function actualizarInicio() {
   const totalMed = lotesHoy.reduce((a,l) => a + l.medidores.length, 0);
   document.getElementById('medidores-hoy').textContent = totalMed;
 
-  const meta = 48; // 4 lotes x 12 medidores diarios
+  const meta = 48;
   const pct = Math.min(Math.round((totalMed / meta) * 100), 100);
   document.getElementById('progreso-dia').textContent = pct + '%';
   document.getElementById('progreso-dia-fill').style.width = pct + '%';
@@ -828,6 +546,44 @@ function actualizarAdmin() {
   document.getElementById('admin-lotes-marco').textContent = `${historial.filter(l=>l.operario.includes('Marco')).length} lotes`;
 }
 
+let keyIndex = 0;
+
+function extraerJSON(texto) {
+  const limpio = texto.replace(/```json|```/g, '').trim();
+  try { return JSON.parse(limpio); } catch (e) {}
+  const match = limpio.match(/\{[\s\S]*\}/);
+  if (match) { try { return JSON.parse(match[0]); } catch (e) {} }
+  return null;
+}
+
+async function llamarGemini(base64, mime) {
+  const keys = getApiKeys();
+  if (keys.length === 0) throw new Error('SIN_CLAVE');
+  let ultimoError = 'ERROR_DESCONOCIDO';
+  for (let intento = 0; intento < keys.length; intento++) {
+    const key = keys[keyIndex % keys.length];
+    keyIndex++;
+    try {
+      const resp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${key}`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({contents:[{parts:[{text:PROMPT},{inline_data:{mime_type:mime,data:base64}}]}]})
+      });
+      if (resp.status === 429) { ultimoError = 'RATE_LIMIT'; continue; }
+      if (!resp.ok) { ultimoError = `HTTP_${resp.status}`; continue; }
+      const data = await resp.json();
+      const texto = data.candidates?.[0]?.content?.parts?.[0]?.text;
+      if (!texto) { ultimoError = 'RESPUESTA_VACIA'; continue; }
+      const datos = extraerJSON(texto);
+      if (!datos) { ultimoError = 'JSON_INVALIDO'; continue; }
+      return datos;
+    } catch (e) {
+      ultimoError = 'ERROR_RED';
+    }
+  }
+  throw new Error(ultimoError);
+}
+
 async function procesarFoto(input) {
   if (!input.files[0] || procesando) return;
   if (loteActual.length >= 12) { showToast('Lote completo'); return; }
@@ -837,7 +593,6 @@ async function procesarFoto(input) {
   reader.onload = async (e) => {
     const base64 = e.target.result.split(',')[1];
     const mime = file.type;
-    const key = localStorage.getItem('metrilab_key');
     document.getElementById('resultado-actual').innerHTML = `
       <div class="glass-card">
         <div class="loading">
@@ -846,16 +601,13 @@ async function procesarFoto(input) {
         </div>
       </div>`;
     let datos = null;
+    let errorTipo = null;
     try {
-      const resp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${key}`, {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({contents:[{parts:[{text:PROMPT},{inline_data:{mime_type:mime,data:base64}}]}]})
-      });
-      const data = await resp.json();
-      const texto = data.candidates[0].content.parts[0].text.replace(/```json|```/g,'').trim();
-      datos = JSON.parse(texto);
-    } catch(e) { console.error(e); }
+      datos = await llamarGemini(base64, mime);
+    } catch (e) {
+      errorTipo = e.message;
+      console.error(e);
+    }
 
     if (datos) {
       loteActual.push(datos);
@@ -874,7 +626,11 @@ async function procesarFoto(input) {
       document.getElementById('seccion-observaciones').style.display = 'block';
       renderObservaciones();
     } else {
-      document.getElementById('resultado-actual').innerHTML = `<div class="glass-card" style="border-color:rgba(220,38,38,0.4)"><p style="color:#fca5a5;font-size:13px;text-align:center">No se pudo leer el medidor. Intenta de nuevo.</p></div>`;
+      let mensaje = 'No se pudo leer el medidor. Intenta de nuevo.';
+      if (errorTipo === 'RATE_LIMIT') mensaje = '⏳ Límite de solicitudes alcanzado. Espera 20-30 segundos e intenta de nuevo.';
+      if (errorTipo === 'SIN_CLAVE') mensaje = 'No hay clave API configurada. Ve a Admin y agrégala.';
+      if (errorTipo === 'ERROR_RED') mensaje = 'Sin conexión a internet. Revisa tu señal e intenta de nuevo.';
+      document.getElementById('resultado-actual').innerHTML = `<div class="glass-card" style="border-color:rgba(220,38,38,0.4)"><p style="color:#fca5a5;font-size:13px;text-align:center">${mensaje}</p></div>`;
     }
     procesando = false;
     input.value = '';
@@ -946,13 +702,9 @@ async function finalizarLote() {
   historial.push({lote, fecha, operario, medidores: loteActual, observaciones: observacionesActual});
   localStorage.setItem('metrilab_historial', JSON.stringify(historial));
 
-  // ===== Sincronizar el lote con Firebase (para la app del jefe) =====
   if (window.subirLoteAFirebase) {
     const loteFirebase = {
-      lote,
-      fecha,
-      operario,
-      cantidadMedidores: loteActual.length,
+      lote, fecha, operario, cantidadMedidores: loteActual.length,
       medidores: loteActual.map((d, i) => ({
         serie_medidor: d.serie_medidor || null,
         marca: d.marca || 'METREX',
