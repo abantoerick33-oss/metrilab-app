@@ -584,13 +584,13 @@ REGLAS DETALLADAS PARA CADA CAMPO:
 - marca: fabricante impreso en placa (ej: "METREX", "APOLO").
 - modelo: capacidad con punto decimal (ej: "G1.6", "G2.5"). Nunca G1,6 ni G16.
 - serie_medidor: número de serie del medidor sin letras.
-- registro: lectura del contador con TODOS los dígitos incluyendo los rojos, usar SIEMPRE coma como decimal (ej: "00954,095" NO "00954.095").
+- registro: SOLAMENTE los 5 primeros dígitos del contador (los enteros que están ANTES de la coma). NO incluyas la coma ni los dígitos rojos. Ejemplos: si ves "00123,422" devuelve "00123". Si ves "00954,095" devuelve "00954". Si ves "016869,247" devuelve "01686".
 - unidad: unidad medida (siempre "m3").
 - volumen_ciclico: valor V (siempre "0.7 dm3").
 - serie_precinto: formato OBLIGATORIO G + 7 dígitos (ej: "G0454825"). Puede estar rotado en cualquier ángulo. Intenta leer rotando mentalmente si ves letras raras.
 
-EJEMPLO DE RESPUESTA CORRECTA:
-{"marca":"METREX","modelo":"G1.6","serie_medidor":"3809043","registro":"00954,095","unidad":"m3","volumen_ciclico":"0.7 dm3","serie_precinto":"G0454825"}
+EJEMPLO DE RESPUESTA CORRECTA (para un medidor que muestra "00123,422"):
+{"marca":"METREX","modelo":"G1.6","serie_medidor":"0087456","registro":"00123","unidad":"m3","volumen_ciclico":"0.7 dm3","serie_precinto":"G0372098"}
 
 Si algún campo no es visible o legible, usa null. Devuelve SOLO el JSON, sin markdown, sin explicaciones.`;
 
@@ -839,6 +839,10 @@ async function procesarFoto(input) {
       if (!datos.modelo) datos.modelo = 'G1.6';
       if (!datos.unidad) datos.unidad = 'm3';
       if (!datos.volumen_ciclico) datos.volumen_ciclico = '0.7 dm3';
+      // Limpiar ceros a la izquierda del registro
+      if (datos.registro) {
+        datos.registro = datos.registro.replace(/^0+/, '') || '0';
+      }
 
       const faltantes = validarCampos(datos);
       loteActual.push(datos);
