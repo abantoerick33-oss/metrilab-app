@@ -12,19 +12,45 @@
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-      background: #0A0A0F;
-      color: white;
+      background: var(--bg-main);
+      color: var(--text-main);
       min-height: 100vh;
       overflow-x: hidden;
+      transition: background 0.3s, color 0.3s;
     }
+
+    /* TEMA OSCURO (default) */
+    body.dark {
+      --bg-main: #0A0A0F;
+      --text-main: white;
+      --text-secondary: rgba(255,255,255,0.6);
+      --text-muted: rgba(255,255,255,0.4);
+      --card-bg: linear-gradient(135deg, rgba(26, 26, 46, 0.7), rgba(42, 26, 62, 0.3));
+      --card-border: rgba(58, 46, 93, 0.3);
+      --input-bg: rgba(26, 26, 46, 0.6);
+      --input-border: rgba(58, 46, 93, 0.5);
+      --gradient-bg: radial-gradient(circle at center, #1A1A2E 0%, #0A0A0F 100%);
+    }
+    body.light {
+      --bg-main: #f8fafc;
+      --text-main: #1e293b;
+      --text-secondary: rgba(30,41,59,0.7);
+      --text-muted: rgba(30,41,59,0.5);
+      --card-bg: white;
+      --card-border: #e2e8f0;
+      --input-bg: #f8fafc;
+      --input-border: #e2e8f0;
+      --gradient-bg: radial-gradient(circle at center, #ffffff 0%, #f1f5f9 100%);
+    }
+
     body::before {
       content: '';
       position: fixed;
       inset: 0;
-      background: radial-gradient(circle at center, #1A1A2E 0%, #0A0A0F 100%);
+      background: var(--gradient-bg);
       z-index: -2;
     }
-    body::after {
+    body.dark::after {
       content: '';
       position: fixed;
       inset: 0;
@@ -34,92 +60,287 @@
       z-index: -1;
       pointer-events: none;
     }
+
     #app { max-width: 430px; margin: 0 auto; min-height: 100vh; position: relative; padding-bottom: 90px; }
+
     .topbar { padding: 20px 20px 10px; display: flex; align-items: center; justify-content: space-between; }
-    .topbar-title { font-size: 24px; font-weight: bold; background: linear-gradient(135deg, #9B59F6, #00D4FF); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
-    .topbar-icons { display: flex; gap: 12px; }
-    .topbar-icons svg { width: 22px; height: 22px; fill: rgba(255,255,255,0.6); cursor: pointer; }
-    .glass-card { background: linear-gradient(135deg, rgba(26, 26, 46, 0.7), rgba(42, 26, 62, 0.3)); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border: 1px solid rgba(58, 46, 93, 0.3); border-radius: 20px; padding: 20px; margin-bottom: 16px; box-shadow: 0 0 30px rgba(155, 89, 246, 0.1); }
-    .glass-card-sm { background: linear-gradient(135deg, rgba(26, 26, 46, 0.5), rgba(10, 10, 15, 0.5)); border-radius: 16px; padding: 16px; }
+    .topbar-title {
+      font-size: 24px; font-weight: bold;
+      background: linear-gradient(135deg, #9B59F6, #00D4FF);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+    }
+    .topbar-icons { display: flex; gap: 12px; align-items: center; }
+    .topbar-icons svg { width: 22px; height: 22px; fill: var(--text-secondary); cursor: pointer; }
+
+    .theme-toggle {
+      background: var(--input-bg); border: 1px solid var(--input-border);
+      padding: 6px 10px; border-radius: 20px; cursor: pointer;
+      font-size: 16px; color: var(--text-main);
+    }
+
+    .glass-card {
+      background: var(--card-bg);
+      backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+      border: 1px solid var(--card-border);
+      border-radius: 20px; padding: 20px; margin-bottom: 16px;
+    }
+    body.dark .glass-card { box-shadow: 0 0 30px rgba(155, 89, 246, 0.1); }
+    body.light .glass-card { box-shadow: 0 4px 20px rgba(0,0,0,0.05); }
+
+    .glass-card-sm {
+      background: var(--card-bg);
+      border-radius: 16px; padding: 16px; border: 1px solid var(--card-border);
+    }
+
     .screen { display: none; padding: 0 20px; }
     .screen.active { display: block; }
-    .greeting-title { font-size: 22px; font-weight: bold; margin-bottom: 8px; }
-    .greeting-sub { color: rgba(255,255,255,0.6); font-size: 14px; margin-bottom: 16px; }
+
+    .greeting-title { font-size: 22px; font-weight: bold; margin-bottom: 8px; color: var(--text-main); }
+    .greeting-sub { color: var(--text-secondary); font-size: 14px; margin-bottom: 16px; }
+
     .progress-label { display: flex; justify-content: space-between; margin-bottom: 6px; }
-    .progress-label span:first-child { color: rgba(255,255,255,0.6); font-size: 12px; }
+    .progress-label span:first-child { color: var(--text-secondary); font-size: 12px; }
     .progress-label span:last-child { color: #00D4FF; font-size: 12px; font-weight: bold; }
-    .progress-track { height: 6px; background: rgba(255,255,255,0.1); border-radius: 10px; overflow: hidden; }
-    .progress-fill { height: 100%; background: linear-gradient(90deg, #9B59F6, #00D4FF); border-radius: 10px; box-shadow: 0 0 10px rgba(155, 89, 246, 0.5); transition: width 0.3s; }
+    .progress-track { height: 6px; background: rgba(128,128,128,0.15); border-radius: 10px; overflow: hidden; }
+    .progress-fill {
+      height: 100%; background: linear-gradient(90deg, #9B59F6, #00D4FF);
+      border-radius: 10px; box-shadow: 0 0 10px rgba(155, 89, 246, 0.5); transition: width 0.3s;
+    }
+
     .metrics-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 20px; }
-    .metric-card { padding: 16px; background: linear-gradient(135deg, rgba(26, 26, 46, 0.5), rgba(10, 10, 15, 0.5)); border-radius: 16px; border: 1px solid rgba(155, 89, 246, 0.2); text-align: center; }
+    .metric-card {
+      padding: 16px; background: var(--card-bg);
+      border-radius: 16px; border: 1px solid rgba(155, 89, 246, 0.2); text-align: center;
+    }
     .metric-card.cyan { border-color: rgba(0, 212, 255, 0.2); }
     .metric-icon { width: 28px; height: 28px; margin: 0 auto 8px; }
     .metric-icon.purple { color: #9B59F6; }
     .metric-icon.cyan { color: #00D4FF; }
-    .metric-val { font-size: 28px; font-weight: bold; color: white; }
-    .metric-label { color: rgba(255,255,255,0.6); font-size: 12px; }
-    .btn-glow { width: 100%; height: 60px; background: linear-gradient(135deg, #9B59F6, #00D4FF); border: none; border-radius: 16px; color: white; font-weight: bold; font-size: 16px; letter-spacing: 1.2px; cursor: pointer; box-shadow: 0 0 30px rgba(155, 89, 246, 0.4); animation: glow-pulse 2s ease-in-out infinite; display: flex; align-items: center; justify-content: center; gap: 10px; margin-bottom: 20px; }
-    @keyframes glow-pulse { 0%, 100% { box-shadow: 0 0 30px rgba(155, 89, 246, 0.4); } 50% { box-shadow: 0 0 50px rgba(155, 89, 246, 0.7), 0 0 80px rgba(0, 212, 255, 0.3); } }
+    .metric-val { font-size: 28px; font-weight: bold; color: var(--text-main); }
+    .metric-label { color: var(--text-secondary); font-size: 12px; }
+
+    .btn-glow {
+      width: 100%; height: 60px;
+      background: linear-gradient(135deg, #9B59F6, #00D4FF);
+      border: none; border-radius: 16px; color: white; font-weight: bold; font-size: 16px;
+      letter-spacing: 1.2px; cursor: pointer;
+      box-shadow: 0 0 30px rgba(155, 89, 246, 0.4);
+      animation: glow-pulse 2s ease-in-out infinite;
+      display: flex; align-items: center; justify-content: center; gap: 10px; margin-bottom: 20px;
+    }
+    @keyframes glow-pulse {
+      0%, 100% { box-shadow: 0 0 30px rgba(155, 89, 246, 0.4); }
+      50% { box-shadow: 0 0 50px rgba(155, 89, 246, 0.7), 0 0 80px rgba(0, 212, 255, 0.3); }
+    }
     .btn-glow:disabled { opacity: 0.5; animation: none; cursor: not-allowed; }
-    .btn-secondary { width: 100%; padding: 14px; background: rgba(155, 89, 246, 0.15); border: 1px solid rgba(155, 89, 246, 0.3); border-radius: 12px; color: #9B59F6; font-size: 13px; font-weight: 500; cursor: pointer; margin-bottom: 8px; }
-    .btn-red { width: 100%; padding: 12px; background: rgba(220, 38, 38, 0.2); border: 1px solid rgba(220, 38, 38, 0.4); border-radius: 12px; color: #fca5a5; font-size: 13px; cursor: pointer; }
-    .section-title { font-size: 18px; font-weight: bold; color: white; margin-bottom: 16px; }
-    .section-title-sm { font-size: 13px; font-weight: 600; color: rgba(255,255,255,0.9); margin-bottom: 10px; }
-    .empty-state { padding: 30px; border: 1px solid rgba(58, 46, 93, 0.3); border-radius: 12px; text-align: center; }
-    .empty-state svg { width: 40px; height: 40px; fill: #3A2E5D; margin: 0 auto 8px; }
-    .empty-state p { color: #B8B8D0; font-size: 14px; }
-    .empty-state span { color: #B8B8D0; font-size: 12px; }
-    .lote-row { display: flex; justify-content: space-between; align-items: center; padding: 12px 0; border-bottom: 1px solid rgba(58, 46, 93, 0.2); }
+
+    .btn-secondary {
+      width: 100%; padding: 14px;
+      background: rgba(155, 89, 246, 0.15); border: 1px solid rgba(155, 89, 246, 0.3);
+      border-radius: 12px; color: #9B59F6; font-size: 13px; font-weight: 500; cursor: pointer; margin-bottom: 8px;
+    }
+    .btn-red {
+      width: 100%; padding: 12px;
+      background: rgba(220, 38, 38, 0.2); border: 1px solid rgba(220, 38, 38, 0.4);
+      border-radius: 12px; color: #ef4444; font-size: 13px; cursor: pointer;
+    }
+
+    .section-title { font-size: 18px; font-weight: bold; color: var(--text-main); margin-bottom: 16px; }
+
+    .empty-state { padding: 30px; border: 1px solid var(--card-border); border-radius: 12px; text-align: center; }
+    .empty-state svg { width: 40px; height: 40px; fill: var(--text-muted); margin: 0 auto 8px; }
+    .empty-state p { color: var(--text-secondary); font-size: 14px; }
+    .empty-state span { color: var(--text-muted); font-size: 12px; }
+
+    .lote-row {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 12px 0; border-bottom: 1px solid var(--card-border);
+    }
     .lote-row:last-child { border: none; }
-    .lote-title { font-size: 13px; font-weight: 500; color: white; }
-    .lote-sub { font-size: 11px; color: rgba(255,255,255,0.5); margin-top: 2px; }
-    .badge { display: inline-block; padding: 4px 10px; border-radius: 8px; font-size: 11px; font-weight: 500; background: rgba(0, 212, 255, 0.15); color: #00D4FF; border: 1px solid rgba(0, 212, 255, 0.3); }
-    .camera-box { background: linear-gradient(135deg, rgba(155, 89, 246, 0.2), rgba(0, 212, 255, 0.1)); border: 2px dashed rgba(155, 89, 246, 0.4); border-radius: 20px; padding: 30px 20px; text-align: center; cursor: pointer; margin-bottom: 16px; transition: all 0.3s; }
-    .camera-box:active { transform: scale(0.98); }
-    .camera-box svg { width: 48px; height: 48px; fill: white; margin-bottom: 12px; filter: drop-shadow(0 0 10px rgba(155, 89, 246, 0.5)); }
-    .camera-box p { color: white; font-size: 14px; font-weight: 500; }
-    .camera-box span { color: rgba(255,255,255,0.5); font-size: 12px; }
-    .select-box { background: rgba(26, 26, 46, 0.6); border: 1px solid rgba(58, 46, 93, 0.5); border-radius: 10px; padding: 12px; color: white; width: 100%; margin-bottom: 12px; font-size: 13px; }
-    .input-box { background: rgba(26, 26, 46, 0.6); border: 1px solid rgba(58, 46, 93, 0.5); border-radius: 10px; padding: 12px; color: white; width: 100%; margin-bottom: 10px; font-size: 13px; }
-    .resultado { background: linear-gradient(135deg, rgba(0, 212, 255, 0.1), rgba(155, 89, 246, 0.05)); border: 1px solid rgba(0, 212, 255, 0.3); border-radius: 16px; padding: 16px; margin-bottom: 16px; }
+    .lote-title { font-size: 13px; font-weight: 500; color: var(--text-main); }
+    .lote-sub { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+
+    .badge {
+      display: inline-block; padding: 4px 10px; border-radius: 8px; font-size: 11px; font-weight: 500;
+      background: rgba(0, 212, 255, 0.15); color: #00D4FF; border: 1px solid rgba(0, 212, 255, 0.3);
+    }
+    .badge-offline { background: rgba(245,158,11,0.15); color: #f59e0b; border-color: rgba(245,158,11,0.3); }
+
+    .camera-box {
+      background: linear-gradient(135deg, rgba(155, 89, 246, 0.2), rgba(0, 212, 255, 0.1));
+      border: 2px dashed rgba(155, 89, 246, 0.4);
+      border-radius: 20px; padding: 24px 20px; text-align: center; margin-bottom: 16px;
+    }
+    .camera-box svg { width: 44px; height: 44px; fill: var(--text-main); margin-bottom: 10px; filter: drop-shadow(0 0 10px rgba(155, 89, 246, 0.5)); }
+    .camera-box p { color: var(--text-main); font-size: 14px; font-weight: 500; margin-bottom: 4px; }
+    .camera-box span { color: var(--text-secondary); font-size: 12px; }
+    .camera-buttons { display: flex; gap: 10px; margin-top: 14px; }
+    .camera-btn {
+      flex: 1; border: none; border-radius: 10px; padding: 10px;
+      font-size: 12px; font-weight: 600; cursor: pointer; color: white;
+    }
+    .camera-btn.primary { background: linear-gradient(135deg, #9B59F6, #00D4FF); }
+    .camera-btn.outline { background: rgba(128,128,128,0.15); border: 1px solid rgba(128,128,128,0.3); color: var(--text-main); }
+
+    .select-box, .input-box {
+      background: var(--input-bg); border: 1px solid var(--input-border);
+      border-radius: 10px; padding: 12px; color: var(--text-main); width: 100%;
+      margin-bottom: 12px; font-size: 13px;
+    }
+    .textarea-box {
+      background: var(--input-bg); border: 1px solid var(--input-border);
+      border-radius: 10px; padding: 10px; color: var(--text-main); width: 100%;
+      margin-top: 8px; font-size: 12px; font-family: inherit; resize: vertical; min-height: 60px;
+    }
+
+    .resultado {
+      background: linear-gradient(135deg, rgba(0, 212, 255, 0.1), rgba(155, 89, 246, 0.05));
+      border: 1px solid rgba(0, 212, 255, 0.3);
+      border-radius: 16px; padding: 16px; margin-bottom: 16px;
+    }
     .resultado-title { font-size: 12px; color: #00D4FF; font-weight: bold; margin-bottom: 10px; }
     .resultado-row { display: flex; justify-content: space-between; font-size: 12px; padding: 4px 0; }
-    .resultado-key { color: rgba(255,255,255,0.5); }
-    .resultado-val { color: white; font-weight: 500; }
-    .medidor-item { background: rgba(26, 26, 46, 0.6); border: 1px solid rgba(58, 46, 93, 0.3); border-radius: 12px; padding: 12px; margin-bottom: 10px; }
-    .medidor-num { display: inline-block; background: linear-gradient(135deg, #9B59F6, #00D4FF); color: white; padding: 3px 10px; border-radius: 8px; font-size: 11px; font-weight: 600; margin-bottom: 8px; }
-    .medidor-data { font-size: 11px; color: rgba(255,255,255,0.6); margin-bottom: 8px; }
-    .medidor-select { width: 100%; padding: 10px; font-size: 12px; background: rgba(10, 10, 15, 0.6); border: 1px solid rgba(58, 46, 93, 0.5); border-radius: 8px; color: white; }
+    .resultado-key { color: var(--text-secondary); }
+    .resultado-val { color: var(--text-main); font-weight: 500; }
+    .resultado-warning { background: rgba(245, 158, 11, 0.1); border-color: rgba(245, 158, 11, 0.4); }
+    .resultado-warning .resultado-title { color: #f59e0b; }
+
+    .field-manual {
+      background: rgba(245, 158, 11, 0.1); border: 1px solid rgba(245, 158, 11, 0.3);
+      border-radius: 10px; padding: 10px; margin: 8px 0;
+    }
+    .field-manual label { display: block; color: #f59e0b; font-size: 11px; margin-bottom: 4px; font-weight: 600; }
+    .field-manual input {
+      width: 100%; padding: 8px; background: var(--input-bg);
+      border: 1px solid var(--input-border); border-radius: 8px; color: var(--text-main); font-size: 12px;
+    }
+
+    .medidor-item {
+      background: var(--input-bg); border: 1px solid var(--card-border);
+      border-radius: 12px; padding: 12px; margin-bottom: 10px;
+    }
+    .medidor-num {
+      display: inline-block;
+      background: linear-gradient(135deg, #9B59F6, #00D4FF);
+      color: white; padding: 3px 10px; border-radius: 8px;
+      font-size: 11px; font-weight: 600;
+    }
+    .btn-delete {
+      background: rgba(220,38,38,0.2); border: 1px solid rgba(220,38,38,0.4);
+      color: #ef4444; padding: 4px 10px; border-radius: 6px; font-size: 11px; cursor: pointer;
+    }
+    .medidor-data { font-size: 11px; color: var(--text-secondary); margin: 8px 0; }
+    .medidor-select {
+      width: 100%; padding: 10px; font-size: 12px;
+      background: var(--input-bg); border: 1px solid var(--input-border);
+      border-radius: 8px; color: var(--text-main);
+    }
     .medidor-select.empty { border-color: rgba(245, 158, 11, 0.5); background: rgba(245, 158, 11, 0.1); }
-    .confirm-card { background: rgba(245, 158, 11, 0.1); border: 1px solid rgba(245, 158, 11, 0.3); border-radius: 12px; padding: 12px; margin-bottom: 12px; }
+    .med-field { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px; }
+    .med-field-item label { display: block; font-size: 10px; color: var(--text-secondary); margin-bottom: 3px; font-weight: 600; }
+    .med-field-item input {
+      width: 100%; padding: 8px; font-size: 12px;
+      background: var(--input-bg); border: 1px solid var(--input-border);
+      border-radius: 8px; color: var(--text-main);
+    }
+    .med-field-item input.empty { border-color: rgba(245,158,11,0.5); background: rgba(245,158,11,0.1); }
+    .med-diff {
+      background: rgba(46, 139, 87, 0.15); border: 1px solid rgba(46,139,87,0.3);
+      padding: 6px 10px; border-radius: 8px; margin-top: 8px;
+      font-size: 11px; color: #10b981; text-align: center; font-weight: 600;
+    }
+
+    .confirm-card {
+      background: rgba(245, 158, 11, 0.1); border: 1px solid rgba(245, 158, 11, 0.3);
+      border-radius: 12px; padding: 12px; margin-bottom: 12px;
+    }
     .confirm-card label { display: flex; align-items: center; gap: 8px; cursor: pointer; }
     .confirm-card input { width: 18px; height: 18px; }
-    .confirm-card span { font-size: 12px; color: white; }
-    .bottom-nav { position: fixed; bottom: 0; left: 50%; transform: translateX(-50%); width: 100%; max-width: 430px; background: linear-gradient(180deg, transparent, rgba(10, 10, 15, 0.95) 30%); padding: 30px 20px 20px; display: flex; justify-content: space-around; z-index: 100; }
-    .tab { display: flex; flex-direction: column; align-items: center; gap: 4px; background: none; border: none; color: rgba(255,255,255,0.4); font-size: 10px; cursor: pointer; padding: 0; }
+    .confirm-card span { font-size: 12px; color: var(--text-main); }
+
+    .bottom-nav {
+      position: fixed; bottom: 0; left: 50%; transform: translateX(-50%);
+      width: 100%; max-width: 430px;
+      background: linear-gradient(180deg, transparent, var(--bg-main) 30%);
+      padding: 30px 20px 20px; display: flex; justify-content: space-around; z-index: 100;
+    }
+    .tab {
+      display: flex; flex-direction: column; align-items: center; gap: 4px;
+      background: none; border: none; color: var(--text-muted);
+      font-size: 10px; cursor: pointer; padding: 0;
+    }
     .tab.active { color: #9B59F6; }
-    .tab-icon { width: 40px; height: 40px; border-radius: 50%; display: flex; align-items: center; justify-content: center; transition: background 0.3s; }
+    .tab-icon {
+      width: 40px; height: 40px; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center; transition: background 0.3s;
+    }
     .tab.active .tab-icon { background: rgba(155, 89, 246, 0.2); }
     .tab svg { width: 22px; height: 22px; fill: currentColor; }
-    .toast { position: fixed; top: 80px; left: 50%; transform: translateX(-50%); background: linear-gradient(135deg, #9B59F6, #00D4FF); color: white; padding: 12px 24px; border-radius: 12px; font-size: 13px; z-index: 999; display: none; box-shadow: 0 0 30px rgba(155, 89, 246, 0.5); }
+
+    .toast {
+      position: fixed; top: 80px; left: 50%; transform: translateX(-50%);
+      background: linear-gradient(135deg, #9B59F6, #00D4FF);
+      color: white; padding: 12px 24px; border-radius: 12px;
+      font-size: 13px; z-index: 999; display: none;
+      box-shadow: 0 0 30px rgba(155, 89, 246, 0.5);
+      max-width: 90%; text-align: center;
+    }
     .toast.show { display: block; animation: fadeIn 0.3s; }
     @keyframes fadeIn { from { opacity: 0; transform: translateX(-50%) translateY(-10px); } to { opacity: 1; transform: translateX(-50%) translateY(0); } }
-    .setup-screen { position: fixed; inset: 0; background: radial-gradient(circle at center, #1A1A2E 0%, #0A0A0F 100%); display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 24px; z-index: 1000; }
-    .setup-logo { width: 80px; height: 80px; background: linear-gradient(135deg, #9B59F6, #00D4FF); border-radius: 24px; display: flex; align-items: center; justify-content: center; margin-bottom: 16px; box-shadow: 0 0 40px rgba(155, 89, 246, 0.5); }
+
+    .setup-screen {
+      position: fixed; inset: 0;
+      background: radial-gradient(circle at center, #1A1A2E 0%, #0A0A0F 100%);
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      padding: 24px; z-index: 1000;
+    }
+    .setup-logo {
+      width: 80px; height: 80px;
+      background: linear-gradient(135deg, #9B59F6, #00D4FF);
+      border-radius: 24px; display: flex; align-items: center; justify-content: center;
+      margin-bottom: 16px; box-shadow: 0 0 40px rgba(155, 89, 246, 0.5);
+    }
     .setup-logo svg { width: 44px; height: 44px; fill: white; }
-    .setup-title { font-size: 32px; font-weight: 700; background: linear-gradient(135deg, #9B59F6, #00D4FF); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; margin-bottom: 4px; }
+    .setup-title {
+      font-size: 32px; font-weight: 700;
+      background: linear-gradient(135deg, #9B59F6, #00D4FF);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+      margin-bottom: 4px;
+    }
     .setup-sub { color: rgba(255,255,255,0.6); font-size: 13px; margin-bottom: 32px; text-align: center; }
-    .setup-card { background: rgba(26, 26, 46, 0.8); backdrop-filter: blur(10px); border: 1px solid rgba(58, 46, 93, 0.5); border-radius: 20px; padding: 24px; width: 100%; max-width: 360px; }
+    .setup-card {
+      background: rgba(26, 26, 46, 0.8); backdrop-filter: blur(10px);
+      border: 1px solid rgba(58, 46, 93, 0.5);
+      border-radius: 20px; padding: 24px; width: 100%; max-width: 360px;
+      color: white;
+    }
     .setup-label { font-size: 13px; font-weight: 600; color: white; margin-bottom: 6px; }
     .setup-hint { font-size: 11px; color: rgba(255,255,255,0.4); margin-bottom: 10px; }
+    .setup-card input, .setup-card select {
+      background: rgba(10,10,15,0.6); color: white;
+      border: 1px solid rgba(58,46,93,0.5);
+    }
+
     .loading { text-align: center; padding: 20px; }
-    .spinner { width: 36px; height: 36px; border: 3px solid rgba(155, 89, 246, 0.2); border-top-color: #9B59F6; border-radius: 50%; animation: spin 0.8s linear infinite; margin: 0 auto 10px; box-shadow: 0 0 20px rgba(155, 89, 246, 0.3); }
+    .spinner {
+      width: 36px; height: 36px;
+      border: 3px solid rgba(155, 89, 246, 0.2); border-top-color: #9B59F6;
+      border-radius: 50%; animation: spin 0.8s linear infinite; margin: 0 auto 10px;
+      box-shadow: 0 0 20px rgba(155, 89, 246, 0.3);
+    }
     @keyframes spin { to { transform: rotate(360deg); } }
+
     input[type=file] { display: none; }
-    input, select { font-family: inherit; }
+    input, select, textarea { font-family: inherit; }
+
+    .warning-anomaly {
+      background: rgba(245,158,11,0.15); border: 1px solid rgba(245,158,11,0.4);
+      color: #f59e0b; padding: 10px 12px; border-radius: 10px; margin-bottom: 12px;
+      font-size: 12px; text-align: center;
+    }
   </style>
 </head>
-<body>
+<body class="dark">
 
 <div class="setup-screen" id="setup-screen">
   <div class="setup-logo">
@@ -128,14 +349,9 @@
   <div class="setup-title">MetriLab</div>
   <div class="setup-sub">Laboratorio Inteligente de Medidores</div>
   <div class="setup-card">
-    <div class="setup-label">Clave API de Gemini (obligatoria)</div>
+    <div class="setup-label">Clave API de Gemini</div>
     <div class="setup-hint">Tu clave de Google AI Studio. Se guarda solo en este dispositivo.</div>
     <input class="input-box" type="password" id="setup-key" placeholder="AQ.Ab8RN6...">
-    <div class="setup-label" style="margin-top:8px">Clave API 2 (opcional)</div>
-    <div class="setup-hint">Déjala vacía si solo tienes una clave.</div>
-    <input class="input-box" type="password" id="setup-key2" placeholder="Opcional">
-    <div class="setup-label" style="margin-top:8px">Clave API 3 (opcional)</div>
-    <input class="input-box" type="password" id="setup-key3" placeholder="Opcional">
     <div class="setup-label" style="margin-top:8px">Tu nombre</div>
     <select class="select-box" id="setup-operario">
       <option value="Joseph Erik Abanto Guerra">Joseph Erik Abanto Guerra</option>
@@ -149,17 +365,18 @@
   <div class="topbar">
     <div class="topbar-title">🌙 MetriLab</div>
     <div class="topbar-icons">
+      <button class="theme-toggle" id="theme-toggle" onclick="toggleTheme()">🌙</button>
       <svg viewBox="0 0 24 24" onclick="showToast('Sin notificaciones nuevas')"><path d="M12 22c1.1 0 2-.9 2-2h-4c0 1.1.9 2 2 2zm6-6v-5c0-3.07-1.63-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5v.68C7.64 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2z"/></svg>
-      <svg viewBox="0 0 24 24" onclick="goTo('admin')"><path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94 0 .31.02.64.07.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"/></svg>
     </div>
   </div>
 
   <div class="toast" id="toast"></div>
 
+  <!-- INICIO -->
   <div class="screen active" id="screen-inicio">
     <div class="glass-card">
       <div class="greeting-title" id="greeting">👋 Hola, Joseph</div>
-      <div class="greeting-sub" id="fecha-display">Hoy es 29 de junio, 2026</div>
+      <div class="greeting-sub" id="fecha-display">Cargando...</div>
       <div class="progress-label">
         <span>Progreso del día</span>
         <span id="progreso-dia">0%</span>
@@ -171,12 +388,12 @@
 
     <div class="metrics-grid">
       <div class="metric-card">
-        <svg class="metric-icon purple" viewBox="0 0 24 24" fill="currentColor"><path d="M20 8h-3V4H3c-1.1 0-2 .9-2 2v11h2c0 1.66 1.34 3 3 3s3-1.34 3-3h6c0 1.66 1.34 3 3 3s3-1.34 3-3h2v-5l-3-4zM6 18.5c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zm13.5-9l1.96 2.5H17V9.5h2.5zm-1.5 9c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5z"/></svg>
+        <svg class="metric-icon purple" viewBox="0 0 24 24" fill="currentColor"><path d="M20 8h-3V4H3c-1.1 0-2 .9-2 2v11h2c0 1.66 1.34 3 3 3s3-1.34 3-3h6c0 1.66 1.34 3 3 3s3-1.34 3-3h2v-5l-3-4z"/></svg>
         <div class="metric-val" id="lotes-hoy">0</div>
         <div class="metric-label">Lotes hoy</div>
       </div>
       <div class="metric-card cyan">
-        <svg class="metric-icon cyan" viewBox="0 0 24 24" fill="currentColor"><path d="M19.46 10c-.05 0-.09 0-.13.01-.06-.18-.13-.36-.21-.53l.04-.04c.27-.28.27-.72 0-1L18 7.27c-.28-.28-.72-.28-1 0l-.04.04c-.17-.08-.35-.15-.53-.21.01-.04.01-.08.01-.13 0-.39-.31-.7-.7-.7H14.4c-.39 0-.7.31-.7.7 0 .04 0 .09.01.13-.18.06-.36.13-.53.21L13.14 7.27c-.28-.28-.72-.28-1 0l-1.16 1.16c-.28.28-.28.72 0 1l.04.04c-.08.17-.15.35-.21.53C10.81 10 10.77 10 10.73 10c-.39 0-.7.31-.7.7v1.6c0 .39.31.7.7.7.04 0 .09 0 .13-.01.06.18.13.36.21.53l-.04.04c-.27.28-.27.72 0 1l1.16 1.16c.28.28.72.28 1 0l.04-.04c.17.08.35.15.53.21-.01.04-.01.08-.01.13 0 .39.31.7.7.7h1.6c.39 0 .7-.31.7-.7 0-.04 0-.09-.01-.13.18-.06.36-.13.53-.21l.04.04c.28.28.72.28 1 0l1.16-1.16c.28-.28.28-.72 0-1l-.04-.04c.08-.17.15-.35.21-.53.04.01.09.01.13.01.39 0 .7-.31.7-.7v-1.6c0-.39-.31-.7-.7-.7zM15.2 13.7c-.94 0-1.7-.76-1.7-1.7s.76-1.7 1.7-1.7 1.7.76 1.7 1.7-.76 1.7-1.7 1.7z"/></svg>
+        <svg class="metric-icon cyan" viewBox="0 0 24 24" fill="currentColor"><path d="M19.46 10c-.05 0-.09 0-.13.01-.06-.18-.13-.36-.21-.53l.04-.04c.27-.28.27-.72 0-1L18 7.27c-.28-.28-.72-.28-1 0l-.04.04c-.17-.08-.35-.15-.53-.21z"/></svg>
         <div class="metric-val" id="medidores-hoy">0</div>
         <div class="metric-label">Medidores</div>
       </div>
@@ -189,16 +406,11 @@
 
     <div class="glass-card">
       <div class="section-title">📋 Lotes recientes</div>
-      <div id="lotes-recientes">
-        <div class="empty-state">
-          <svg viewBox="0 0 24 24"><path d="M19 9h-1.42c.13-.31.2-.65.2-1C17.78 6.34 16.44 5 14.78 5c-.85 0-1.61.36-2.16.93l-.62.64-.62-.64A2.97 2.97 0 0 0 9.22 5C7.56 5 6.22 6.34 6.22 8c0 .35.07.69.2 1H5c-1.1 0-1.99.89-1.99 2L3 19c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2v-8c0-1.11-.9-2-2-2zM14.78 7c.55 0 1 .45 1 1s-.45 1-1 1-1-.45-1-1 .45-1 1-1zm-5.56 0c.55 0 1 .45 1 1s-.45 1-1 1-1-.45-1-1 .45-1 1-1zM19 19H5v-2h14v2zm0-5H5v-3h4.08L7.6 13.02l1.62 1.18L12 10.41l3.78 3.79 1.62-1.18L15.92 11H19v3z"/></svg>
-          <p>No hay lotes aún</p>
-          <span>El laboratorio espera...</span>
-        </div>
-      </div>
+      <div id="lotes-recientes"></div>
     </div>
   </div>
 
+  <!-- REGISTRO -->
   <div class="screen" id="screen-registro">
     <div class="glass-card">
       <div class="metric-label" style="margin-bottom:8px">Operario</div>
@@ -207,8 +419,8 @@
         <option value="Marco David Rodríguez Valencia">Marco David Rodríguez Valencia</option>
       </select>
       <div style="display:flex;justify-content:space-between;align-items:center">
-        <span style="font-size:12px;color:rgba(255,255,255,0.5)" id="lote-actual">Lote: --</span>
-        <span style="font-size:12px;color:rgba(255,255,255,0.5)" id="fecha-actual">--</span>
+        <span style="font-size:12px;color:var(--text-secondary)" id="lote-actual">Lote: --</span>
+        <span style="font-size:12px;color:var(--text-secondary)" id="fecha-actual">--</span>
       </div>
     </div>
 
@@ -216,18 +428,14 @@
       <svg viewBox="0 0 24 24"><path d="M12 15.2A3.2 3.2 0 0 1 8.8 12 3.2 3.2 0 0 1 12 8.8 3.2 3.2 0 0 1 15.2 12 3.2 3.2 0 0 1 12 15.2M20 4h-3.17L15 2H9L7.17 4H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2z"/></svg>
       <p>Sube una foto del medidor</p>
       <span>desde cámara o galería</span>
-      <div style="display:flex;gap:10px;margin-top:16px">
-        <button onclick="document.getElementById('file-camara').click()" style="flex:1;background:linear-gradient(135deg,#9B59F6,#00D4FF);color:white;border:none;border-radius:10px;padding:10px;font-size:12px;font-weight:600;cursor:pointer">
-          📷 Cámara
-        </button>
-        <button onclick="document.getElementById('file-galeria').click()" style="flex:1;background:rgba(255,255,255,0.15);color:white;border:1px solid rgba(255,255,255,0.3);border-radius:10px;padding:10px;font-size:12px;font-weight:600;cursor:pointer">
-          🖼️ Galería
-        </button>
+      <div class="camera-buttons">
+        <button class="camera-btn primary" onclick="document.getElementById('file-camara').click()">📷 Cámara</button>
+        <button class="camera-btn outline" onclick="document.getElementById('file-galeria').click()">🖼️ Galería</button>
       </div>
       <input type="file" id="file-camara" accept="image/*" capture="environment" onchange="procesarFoto(this)">
       <input type="file" id="file-galeria" accept="image/*" onchange="procesarFoto(this)">
     </div>
-    
+
     <div class="glass-card-sm" style="margin-bottom:16px">
       <div class="progress-label" style="margin-bottom:6px">
         <span>Progreso del lote</span>
@@ -238,12 +446,13 @@
       </div>
     </div>
 
+    <div id="warning-anomaly-container"></div>
     <div id="resultado-actual"></div>
 
     <div id="seccion-observaciones" style="display:none">
       <div class="glass-card">
-        <div class="section-title">📋 Observaciones por medidor</div>
-        <p style="font-size:11px;color:rgba(255,255,255,0.5);margin-bottom:12px">Selecciona una observación para cada medidor.</p>
+        <div class="section-title">📋 Observaciones y registro final</div>
+        <p style="font-size:11px;color:var(--text-secondary);margin-bottom:12px">Completa observación, registro final y comentarios opcionales para cada medidor.</p>
         <div id="lista-observaciones"></div>
       </div>
 
@@ -260,16 +469,14 @@
     </div>
   </div>
 
+  <!-- HISTORIAL -->
   <div class="screen" id="screen-historial">
     <div class="section-title">📚 Historial de lotes</div>
-    <div id="historial-lista">
-      <div class="empty-state">
-        <svg viewBox="0 0 24 24"><path d="M13 3a9 9 0 0 0-9 9H1l3.89 3.89.07.14L9 12H6c0-3.87 3.13-7 7-7s7 3.13 7 7-3.13 7-7 7c-1.93 0-3.68-.79-4.94-2.06l-1.42 1.42A8.954 8.954 0 0 0 13 21a9 9 0 0 0 0-18zm-1 5v5l4.28 2.54.72-1.21-3.5-2.08V8H12z"/></svg>
-        <p>No hay lotes registrados aún</p>
-      </div>
-    </div>
+    <p style="font-size:11px;color:var(--text-secondary);margin-bottom:12px">Últimos 10 lotes disponibles offline.</p>
+    <div id="historial-lista"></div>
   </div>
 
+  <!-- ADMIN -->
   <div class="screen" id="screen-admin">
     <div class="glass-card">
       <div class="section-title">📊 Estadísticas generales</div>
@@ -305,11 +512,8 @@
 
     <div class="glass-card">
       <div class="section-title">⚙️ Configuración API</div>
-      <p style="font-size:11px;color:rgba(255,255,255,0.5);margin-bottom:10px">Usar varias claves reduce los errores de "límite alcanzado".</p>
-      <input class="input-box" type="password" id="nueva-key" placeholder="Clave 1 (obligatoria)">
-      <input class="input-box" type="password" id="nueva-key2" placeholder="Clave 2 (opcional)">
-      <input class="input-box" type="password" id="nueva-key3" placeholder="Clave 3 (opcional)">
-      <button class="btn-secondary" onclick="actualizarClaves()">Actualizar claves</button>
+      <input class="input-box" type="password" id="nueva-key" placeholder="Nueva clave API">
+      <button class="btn-secondary" onclick="cambiarClave()">Actualizar clave</button>
     </div>
 
     <button class="btn-red" onclick="limpiarDatos()">🗑️ Eliminar todos los datos</button>
@@ -335,34 +539,6 @@
   </nav>
 </div>
 
-<script type="module">
-  import { initializeApp } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-app.js";
-  import { getFirestore, collection, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js";
-
-  const firebaseConfig = {
-    apiKey: "AIzaSyCpRopyllFTQu3puQtRlLWAy83JXXgvXI0",
-    authDomain: "metrilab-appjefe.firebaseapp.com",
-    projectId: "metrilab-appjefe",
-    storageBucket: "metrilab-appjefe.firebasestorage.app",
-    messagingSenderId: "407817648389",
-    appId: "1:407817648389:web:425dcf5f446ecd3a2f5f6c"
-  };
-
-  const firebaseApp = initializeApp(firebaseConfig);
-  const db = getFirestore(firebaseApp);
-
-  window.subirLoteAFirebase = async function (loteData) {
-    try {
-      await addDoc(collection(db, "lotes"), { ...loteData, creado: serverTimestamp() });
-      console.log("Lote sincronizado con Firebase:", loteData.lote);
-      return true;
-    } catch (error) {
-      console.error("No se pudo sincronizar con Firebase (revisa tu conexión):", error);
-      return false;
-    }
-  };
-</script>
-
 <script>
 const OBSERVACIONES = [
   "NINGUNA","PRESENCIA DE CORROSIÓN SOBRE MEDIDOR","PRESENCIA DE GOLPE SOBRE MEDIDOR",
@@ -375,33 +551,79 @@ const OBSERVACIONES = [
   "AUSENCIA DE TORNILLOS DE SEGURIDAD"
 ];
 
+const CAMPOS_REQUERIDOS = ['marca','modelo','serie_medidor','registro','unidad','volumen_ciclico','serie_precinto'];
+
 let loteActual = [];
 let fotosActual = [];
 let observacionesActual = [];
+let comentariosActual = [];
+let registrosFinalesActual = [];
+let tiemposProcesamiento = [];
 let procesando = false;
 let historial = JSON.parse(localStorage.getItem('metrilab_historial') || '[]');
 let contadorLoteDia = JSON.parse(localStorage.getItem('metrilab_contador') || '{}');
 
-const PROMPT = `Analiza esta imagen de un medidor de gas con extremo detalle.
-Extrae exactamente estos datos en JSON sin texto adicional:
-{"marca":"","modelo":"","serie_medidor":"","registro":"","unidad":"","volumen_ciclico":"","serie_precinto":""}
-- marca: fabricante (ej: METREX)
-- modelo: capacidad con punto (ej: G1.6)
-- serie_medidor: número de serie
-- registro: lectura con SIEMPRE coma decimal (ej: 00954,095)
-- unidad: ej m3
-- volumen_ciclico: valor V (ej: 0.7 dm3)
-- serie_precinto: formato G + 7 dígitos. Puede estar rotado en cualquier ángulo. Si no visible pon null.
-Si no puedes leer pon null.`;
+const MAX_HISTORIAL = 10;
 
+const PROMPT = `Eres un experto en análisis de medidores de gas industriales. Analiza esta imagen con extremo detalle.
+
+Debes devolver EXCLUSIVAMENTE un objeto JSON con este esquema EXACTO, sin texto adicional:
+
+{
+  "marca": "string o null",
+  "modelo": "string o null",
+  "serie_medidor": "string o null",
+  "registro": "string o null",
+  "unidad": "string o null",
+  "volumen_ciclico": "string o null",
+  "serie_precinto": "string o null"
+}
+
+REGLAS DETALLADAS PARA CADA CAMPO:
+
+- marca: fabricante impreso en placa (ej: "METREX", "APOLO").
+- modelo: capacidad con punto decimal (ej: "G1.6", "G2.5"). Nunca G1,6 ni G16.
+- serie_medidor: número de serie del medidor sin letras.
+- registro: lectura del contador con TODOS los dígitos incluyendo los rojos, usar SIEMPRE coma como decimal (ej: "00954,095" NO "00954.095").
+- unidad: unidad medida (siempre "m3").
+- volumen_ciclico: valor V (siempre "0.7 dm3").
+- serie_precinto: formato OBLIGATORIO G + 7 dígitos (ej: "G0454825"). Puede estar rotado en cualquier ángulo. Intenta leer rotando mentalmente si ves letras raras.
+
+EJEMPLO DE RESPUESTA CORRECTA:
+{"marca":"METREX","modelo":"G1.6","serie_medidor":"3809043","registro":"00954,095","unidad":"m3","volumen_ciclico":"0.7 dm3","serie_precinto":"G0454825"}
+
+Si algún campo no es visible o legible, usa null. Devuelve SOLO el JSON, sin markdown, sin explicaciones.`;
+
+// TEMA
+function toggleTheme() {
+  const body = document.body;
+  const btn = document.getElementById('theme-toggle');
+  if (body.classList.contains('dark')) {
+    body.classList.remove('dark');
+    body.classList.add('light');
+    btn.textContent = '☀️';
+    localStorage.setItem('metrilab_theme', 'light');
+  } else {
+    body.classList.remove('light');
+    body.classList.add('dark');
+    btn.textContent = '🌙';
+    localStorage.setItem('metrilab_theme', 'dark');
+  }
+}
+
+function cargarTema() {
+  const tema = localStorage.getItem('metrilab_theme') || 'dark';
+  document.body.classList.remove('dark','light');
+  document.body.classList.add(tema);
+  const btn = document.getElementById('theme-toggle');
+  if (btn) btn.textContent = tema === 'dark' ? '🌙' : '☀️';
+}
+
+// CONFIGURACIÓN
 function guardarConfiguracion() {
   const key = document.getElementById('setup-key').value.trim();
-  const key2 = document.getElementById('setup-key2').value.trim();
-  const key3 = document.getElementById('setup-key3').value.trim();
   const operario = document.getElementById('setup-operario').value;
   if (!key) { alert('Ingresa tu clave API'); return; }
-  const claves = [key, key2, key3].filter(k => k);
-  localStorage.setItem('metrilab_keys', JSON.stringify(claves));
   localStorage.setItem('metrilab_key', key);
   localStorage.setItem('metrilab_operario', operario);
   document.getElementById('setup-screen').style.display = 'none';
@@ -409,38 +631,27 @@ function guardarConfiguracion() {
   iniciarApp();
 }
 
-function getApiKeys() {
-  const multi = JSON.parse(localStorage.getItem('metrilab_keys') || '[]');
-  if (multi.length) return multi;
-  const single = localStorage.getItem('metrilab_key');
-  return single ? [single] : [];
-}
-
 function iniciarApp() {
-  const keys = getApiKeys();
-  if (keys.length === 0) { document.getElementById('setup-screen').style.display = 'flex'; return; }
+  const key = localStorage.getItem('metrilab_key');
+  if (!key) { document.getElementById('setup-screen').style.display = 'flex'; return; }
   document.getElementById('setup-screen').style.display = 'none';
   document.getElementById('app').style.display = 'block';
+  cargarTema();
   const operario = localStorage.getItem('metrilab_operario') || '';
   if (operario) document.getElementById('operario-select').value = operario;
   actualizarFecha();
   actualizarInicio();
 }
 
-function actualizarClaves() {
+function cambiarClave() {
   const key = document.getElementById('nueva-key').value.trim();
-  const key2 = document.getElementById('nueva-key2').value.trim();
-  const key3 = document.getElementById('nueva-key3').value.trim();
-  if (!key) { showToast('Ingresa al menos la clave 1'); return; }
-  const claves = [key, key2, key3].filter(k => k);
-  localStorage.setItem('metrilab_keys', JSON.stringify(claves));
+  if (!key) { showToast('Ingresa la nueva clave'); return; }
   localStorage.setItem('metrilab_key', key);
   document.getElementById('nueva-key').value = '';
-  document.getElementById('nueva-key2').value = '';
-  document.getElementById('nueva-key3').value = '';
-  showToast(`${claves.length} clave(s) actualizada(s)`);
+  showToast('Clave actualizada');
 }
 
+// UTILIDADES
 function getFecha() {
   return new Date().toLocaleString('es-PE', {timeZone:'America/Lima', hour12:false}).replace(',','');
 }
@@ -509,7 +720,7 @@ function actualizarInicio() {
   document.getElementById('greeting').textContent = `👋 Hola, ${op.split(' ')[0]}`;
   const contenedor = document.getElementById('lotes-recientes');
   if (historial.length === 0) {
-    contenedor.innerHTML = `<div class="empty-state"><svg viewBox="0 0 24 24"><path d="M19 9h-1.42c.13-.31.2-.65.2-1C17.78 6.34 16.44 5 14.78 5c-.85 0-1.61.36-2.16.93l-.62.64-.62-.64A2.97 2.97 0 0 0 9.22 5C7.56 5 6.22 6.34 6.22 8c0 .35.07.69.2 1H5c-1.1 0-1.99.89-1.99 2L3 19c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2v-8c0-1.11-.9-2-2-2z"/></svg><p>No hay lotes aún</p><span>El laboratorio espera...</span></div>`;
+    contenedor.innerHTML = `<div class="empty-state"><p>No hay lotes aún</p><span>El laboratorio espera...</span></div>`;
     return;
   }
   contenedor.innerHTML = [...historial].reverse().slice(0,5).map(l => `
@@ -525,17 +736,17 @@ function actualizarInicio() {
 function actualizarHistorial() {
   const contenedor = document.getElementById('historial-lista');
   if (historial.length === 0) {
-    contenedor.innerHTML = `<div class="empty-state"><svg viewBox="0 0 24 24"><path d="M13 3a9 9 0 0 0-9 9H1l3.89 3.89.07.14L9 12H6c0-3.87 3.13-7 7-7s7 3.13 7 7-3.13 7-7 7c-1.93 0-3.68-.79-4.94-2.06l-1.42 1.42A8.954 8.954 0 0 0 13 21a9 9 0 0 0 0-18zm-1 5v5l4.28 2.54.72-1.21-3.5-2.08V8H12z"/></svg><p>No hay lotes registrados aún</p></div>`;
+    contenedor.innerHTML = `<div class="empty-state"><p>No hay lotes registrados aún</p></div>`;
     return;
   }
   contenedor.innerHTML = [...historial].reverse().map(l => `
     <div class="glass-card">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-        <span style="font-size:14px;font-weight:600;color:white">${l.lote}</span>
+        <span style="font-size:14px;font-weight:600;color:var(--text-main)">${l.lote}</span>
         <span class="badge">OK</span>
       </div>
-      <div style="font-size:12px;color:rgba(255,255,255,0.5);margin-bottom:6px">${l.fecha} · ${l.operario}</div>
-      <div style="font-size:12px;color:white">${l.medidores.length} medidores registrados</div>
+      <div style="font-size:12px;color:var(--text-secondary);margin-bottom:6px">${l.fecha} · ${l.operario}</div>
+      <div style="font-size:12px;color:var(--text-main)">${l.medidores.length} medidores registrados</div>
     </div>`).join('');
 }
 
@@ -546,94 +757,123 @@ function actualizarAdmin() {
   document.getElementById('admin-lotes-marco').textContent = `${historial.filter(l=>l.operario.includes('Marco')).length} lotes`;
 }
 
-let keyIndex = 0;
+// OPTIMIZACIÓN DE IMAGEN
+async function redimensionarImagen(dataUrl, maxAncho = 1024) {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      const scale = Math.min(maxAncho / img.width, 1);
+      const canvas = document.createElement('canvas');
+      canvas.width = img.width * scale;
+      canvas.height = img.height * scale;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      resolve(canvas.toDataURL('image/jpeg', 0.85));
+    };
+    img.src = dataUrl;
+  });
+}
 
-function extraerJSON(texto) {
-  const limpio = texto.replace(/```json|```/g, '').trim();
-  try { return JSON.parse(limpio); } catch (e) {}
-  const match = limpio.match(/\{[\s\S]*\}/);
-  if (match) { try { return JSON.parse(match[0]); } catch (e) {} }
+// VALIDACIÓN
+function validarCampos(datos) {
+  const faltantes = [];
+  CAMPOS_REQUERIDOS.forEach(campo => {
+    if (!datos[campo] || datos[campo] === null || datos[campo] === '') {
+      // no incluir serie_precinto como faltante crítico (puede ser N/D)
+      if (campo !== 'serie_precinto') faltantes.push(campo);
+    }
+  });
+  return faltantes;
+}
+
+// DETECCIÓN DE ANOMALÍAS
+function detectarAnomalia() {
+  if (tiemposProcesamiento.length < 3) return null;
+  const ultimos = tiemposProcesamiento.slice(-3);
+  const promedio = ultimos.reduce((a,b) => a+b, 0) / ultimos.length;
+  // Si el promedio es menor a 5 segundos entre medidores, es sospechoso
+  if (promedio < 5000) {
+    return `⚠️ Velocidad de registro inusualmente rápida detectada (${(promedio/1000).toFixed(1)}s promedio). Verifica que los datos sean correctos.`;
+  }
   return null;
 }
 
-async function llamarGemini(base64, mime) {
-  const keys = getApiKeys();
-  if (keys.length === 0) throw new Error('SIN_CLAVE');
-  let ultimoError = 'ERROR_DESCONOCIDO';
-  for (let intento = 0; intento < keys.length; intento++) {
-    const key = keys[keyIndex % keys.length];
-    keyIndex++;
+// PROCESAR FOTO
+async function procesarFoto(input) {
+  if (!input.files[0] || procesando) return;
+  if (loteActual.length >= 12) { showToast('Lote completo'); return; }
+  procesando = true;
+  const tiempoInicio = Date.now();
+  const file = input.files[0];
+  const reader = new FileReader();
+  reader.onload = async (e) => {
+    document.getElementById('resultado-actual').innerHTML = `
+      <div class="glass-card">
+        <div class="loading">
+          <div class="spinner"></div>
+          <p style="font-size:13px;color:var(--text-secondary)">Optimizando imagen y analizando...</p>
+        </div>
+      </div>`;
+
+    // Redimensionar
+    const imgOptimizada = await redimensionarImagen(e.target.result, 1024);
+    const base64 = imgOptimizada.split(',')[1];
+    const mime = 'image/jpeg';
+    const key = localStorage.getItem('metrilab_key');
+
+    let datos = null;
     try {
       const resp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${key}`, {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({contents:[{parts:[{text:PROMPT},{inline_data:{mime_type:mime,data:base64}}]}]})
       });
-      if (resp.status === 429) { ultimoError = 'RATE_LIMIT'; continue; }
-      if (!resp.ok) { ultimoError = `HTTP_${resp.status}`; continue; }
       const data = await resp.json();
-      const texto = data.candidates?.[0]?.content?.parts?.[0]?.text;
-      if (!texto) { ultimoError = 'RESPUESTA_VACIA'; continue; }
-      const datos = extraerJSON(texto);
-      if (!datos) { ultimoError = 'JSON_INVALIDO'; continue; }
-      return datos;
-    } catch (e) {
-      ultimoError = 'ERROR_RED';
-    }
-  }
-  throw new Error(ultimoError);
-}
-
-async function procesarFoto(input) {
-  if (!input.files[0] || procesando) return;
-  if (loteActual.length >= 12) { showToast('Lote completo'); return; }
-  procesando = true;
-  const file = input.files[0];
-  const reader = new FileReader();
-  reader.onload = async (e) => {
-    const base64 = e.target.result.split(',')[1];
-    const mime = file.type;
-    document.getElementById('resultado-actual').innerHTML = `
-      <div class="glass-card">
-        <div class="loading">
-          <div class="spinner"></div>
-          <p style="font-size:13px;color:rgba(255,255,255,0.7)">Analizando medidor ${loteActual.length + 1}...</p>
-        </div>
-      </div>`;
-    let datos = null;
-    let errorTipo = null;
-    try {
-      datos = await llamarGemini(base64, mime);
-    } catch (e) {
-      errorTipo = e.message;
-      console.error(e);
-    }
+      const texto = data.candidates[0].content.parts[0].text.replace(/```json|```/g,'').trim();
+      datos = JSON.parse(texto);
+    } catch(err) { console.error(err); }
 
     if (datos) {
+      // Rellenar defaults
+      if (!datos.marca) datos.marca = 'METREX';
+      if (!datos.modelo) datos.modelo = 'G1.6';
+      if (!datos.unidad) datos.unidad = 'm3';
+      if (!datos.volumen_ciclico) datos.volumen_ciclico = '0.7 dm3';
+
+      const faltantes = validarCampos(datos);
       loteActual.push(datos);
-      fotosActual.push(e.target.result);
+      fotosActual.push(imgOptimizada);
       observacionesActual.push("");
+      comentariosActual.push("");
+      registrosFinalesActual.push("");
+
+      const tiempoTotal = Date.now() - tiempoInicio;
+      tiemposProcesamiento.push(tiempoTotal);
+
       actualizarProgreso();
+
+      const claseWarning = faltantes.length > 0 ? 'resultado-warning' : '';
+      const tituloTexto = faltantes.length > 0 ? `⚠️ Medidor ${loteActual.length} — faltan datos` : `✨ Medidor ${loteActual.length} registrado`;
+
       document.getElementById('resultado-actual').innerHTML = `
-        <div class="resultado">
-          <div class="resultado-title">✨ Medidor ${loteActual.length} registrado</div>
-          <div class="resultado-row"><span class="resultado-key">Marca</span><span class="resultado-val">${datos.marca||'METREX'}</span></div>
-          <div class="resultado-row"><span class="resultado-key">Modelo</span><span class="resultado-val">${datos.modelo||'G1.6'}</span></div>
-          <div class="resultado-row"><span class="resultado-key">Serie</span><span class="resultado-val">${datos.serie_medidor}</span></div>
-          <div class="resultado-row"><span class="resultado-key">Registro</span><span class="resultado-val">${datos.registro} ${datos.unidad}</span></div>
+        <div class="resultado ${claseWarning}">
+          <div class="resultado-title">${tituloTexto}</div>
+          <div class="resultado-row"><span class="resultado-key">Marca</span><span class="resultado-val">${datos.marca}</span></div>
+          <div class="resultado-row"><span class="resultado-key">Modelo</span><span class="resultado-val">${datos.modelo}</span></div>
+          <div class="resultado-row"><span class="resultado-key">Serie</span><span class="resultado-val">${datos.serie_medidor || 'FALTA'}</span></div>
+          <div class="resultado-row"><span class="resultado-key">Registro</span><span class="resultado-val">${datos.registro || 'FALTA'} ${datos.unidad}</span></div>
           <div class="resultado-row"><span class="resultado-key">Precinto</span><span class="resultado-val">${datos.serie_precinto||'N/D'}</span></div>
         </div>`;
+
+      // Alerta de anomalía
+      const anomalia = detectarAnomalia();
+      const contWarn = document.getElementById('warning-anomaly-container');
+      contWarn.innerHTML = anomalia ? `<div class="warning-anomaly">${anomalia}</div>` : '';
+
       document.getElementById('seccion-observaciones').style.display = 'block';
       renderObservaciones();
     } else {
-      let mensaje = 'No se pudo leer el medidor. Intenta de nuevo.';
-      if (errorTipo === 'RATE_LIMIT') mensaje = '⏳ Límite de solicitudes alcanzado. Espera 20-30 segundos e intenta de nuevo.';
-      if (errorTipo === 'SIN_CLAVE') mensaje = 'No hay clave API configurada. Ve a Admin y agrégala.';
-      if (errorTipo === 'ERROR_RED') mensaje = 'Sin conexión a internet. Revisa tu señal e intenta de nuevo.';
-      if (errorTipo === 'RESPUESTA_VACIA') mensaje = 'Gemini no devolvió datos (posiblemente bloqueó la imagen). Prueba con otra foto.';
-      if (errorTipo === 'JSON_INVALIDO') mensaje = 'La respuesta no se pudo interpretar. Intenta de nuevo.';
-      if (errorTipo && errorTipo.startsWith('HTTP_')) mensaje = `Error del servidor (${errorTipo}). Revisa que tu clave API sea correcta.`;
-      document.getElementById('resultado-actual').innerHTML = `<div class="glass-card" style="border-color:rgba(220,38,38,0.4)"><p style="color:#fca5a5;font-size:13px;text-align:center">${mensaje}</p><p style="color:rgba(255,255,255,0.35);font-size:10px;text-align:center;margin-top:8px">Código: ${errorTipo || 'N/D'}</p></div>`;
+      document.getElementById('resultado-actual').innerHTML = `<div class="glass-card" style="border-color:rgba(220,38,38,0.4)"><p style="color:#fca5a5;font-size:13px;text-align:center">No se pudo leer el medidor. Intenta de nuevo.</p></div>`;
     }
     procesando = false;
     input.value = '';
@@ -641,39 +881,58 @@ async function procesarFoto(input) {
   reader.readAsDataURL(file);
 }
 
+// RENDER OBSERVACIONES CON CAMPOS EXTRA
 function renderObservaciones() {
   const cont = document.getElementById('lista-observaciones');
-  cont.innerHTML = loteActual.map((d, i) => `
+  cont.innerHTML = loteActual.map((d, i) => {
+    const faltantes = validarCampos(d);
+    const regInicial = parseFloat((d.registro || '0').replace(',', '.'));
+    const regFinal = parseFloat((registrosFinalesActual[i] || '0').replace(',', '.'));
+    const diff = (!isNaN(regInicial) && !isNaN(regFinal) && registrosFinalesActual[i]) ? (regFinal - regInicial).toFixed(3).replace('.', ',') : null;
+
+    let camposFaltantes = '';
+    if (faltantes.length > 0) {
+      camposFaltantes = faltantes.map(f => `
+        <div class="field-manual">
+          <label>Falta: ${f.replace('_',' ').toUpperCase()}</label>
+          <input type="text" placeholder="Ingresa manualmente" value="${d[f] || ''}" onchange="actualizarCampo(${i}, '${f}', this.value)">
+        </div>
+      `).join('');
+    }
+
+    return `
     <div class="medidor-item">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
         <div class="medidor-num">#${i+1}</div>
-        <button onclick="eliminarMedidor(${i})" style="background:rgba(220,38,38,0.2);border:1px solid rgba(220,38,38,0.4);color:#fca5a5;padding:4px 10px;border-radius:6px;font-size:11px;cursor:pointer">
-          🗑️ Eliminar
-        </button>
+        <button class="btn-delete" onclick="eliminarMedidor(${i})">🗑️ Eliminar</button>
       </div>
-      <div class="medidor-data">Serie: ${d.serie_medidor} · Registro: ${d.registro} ${d.unidad}</div>
+      <div class="medidor-data">Serie: ${d.serie_medidor || 'FALTA'} · Registro inicial: ${d.registro || 'FALTA'} ${d.unidad || ''}</div>
+      ${camposFaltantes}
       <select class="medidor-select ${observacionesActual[i]?'':'empty'}" onchange="cambiarObservacion(${i}, this.value)">
         <option value="">— Selecciona observación —</option>
         ${OBSERVACIONES.map(o => `<option value="${o}" ${observacionesActual[i]===o?'selected':''}>${o}</option>`).join('')}
       </select>
+      <div class="med-field">
+        <div class="med-field-item">
+          <label>Registro final (m³)</label>
+          <input type="text" class="${registrosFinalesActual[i]?'':'empty'}" placeholder="Ej: 00960,150" value="${registrosFinalesActual[i]||''}" onchange="cambiarRegistroFinal(${i}, this.value)">
+        </div>
+        <div class="med-field-item">
+          <label>Diferencia</label>
+          <input type="text" value="${diff !== null ? diff + ' m³' : '—'}" readonly style="background:rgba(46,139,87,0.1)">
+        </div>
+      </div>
+      ${diff !== null ? `<div class="med-diff">Volumen: ${diff} m³</div>` : ''}
+      <textarea class="textarea-box" placeholder="Comentarios adicionales (opcional)" onchange="cambiarComentario(${i}, this.value)">${comentariosActual[i]||''}</textarea>
     </div>
-  `).join('');
+  `;
+  }).join('');
   actualizarBotonFinalizar();
 }
 
-function eliminarMedidor(idx) {
-  if (!confirm(`¿Eliminar el medidor #${idx+1}?`)) return;
-  loteActual.splice(idx, 1);
-  fotosActual.splice(idx, 1);
-  observacionesActual.splice(idx, 1);
-  actualizarProgreso();
-  if (loteActual.length === 0) {
-    document.getElementById('resultado-actual').innerHTML = '';
-    document.getElementById('seccion-observaciones').style.display = 'none';
-  } else {
-    renderObservaciones();
-  }
-  showToast('Medidor eliminado');
+function actualizarCampo(idx, campo, valor) {
+  loteActual[idx][campo] = valor;
+  renderObservaciones();
 }
 
 function cambiarObservacion(idx, valor) {
@@ -681,10 +940,40 @@ function cambiarObservacion(idx, valor) {
   renderObservaciones();
 }
 
+function cambiarRegistroFinal(idx, valor) {
+  registrosFinalesActual[idx] = valor;
+  renderObservaciones();
+}
+
+function cambiarComentario(idx, valor) {
+  comentariosActual[idx] = valor;
+}
+
+function eliminarMedidor(idx) {
+  if (!confirm(`¿Eliminar el medidor #${idx+1}?`)) return;
+  loteActual.splice(idx, 1);
+  fotosActual.splice(idx, 1);
+  observacionesActual.splice(idx, 1);
+  comentariosActual.splice(idx, 1);
+  registrosFinalesActual.splice(idx, 1);
+  tiemposProcesamiento.splice(idx, 1);
+  actualizarProgreso();
+  if (loteActual.length === 0) {
+    document.getElementById('resultado-actual').innerHTML = '';
+    document.getElementById('seccion-observaciones').style.display = 'none';
+    document.getElementById('warning-anomaly-container').innerHTML = '';
+  } else {
+    renderObservaciones();
+  }
+  showToast('Medidor eliminado');
+}
+
 function actualizarBotonFinalizar() {
-  const todasLlenas = observacionesActual.length > 0 && observacionesActual.every(o => o !== "");
+  const obsLlenas = observacionesActual.length > 0 && observacionesActual.every(o => o !== "");
+  const regLlenos = registrosFinalesActual.length > 0 && registrosFinalesActual.every(r => r !== "");
+  const camposLlenos = loteActual.every(d => validarCampos(d).length === 0);
   const confirmado = document.getElementById('confirmar-check')?.checked;
-  document.getElementById('btn-finalizar').disabled = !(todasLlenas && confirmado);
+  document.getElementById('btn-finalizar').disabled = !(obsLlenas && regLlenos && camposLlenos && confirmado);
 }
 
 function actualizarProgreso() {
@@ -696,62 +985,49 @@ function actualizarProgreso() {
 async function finalizarLote() {
   if (loteActual.length === 0) { showToast('No hay medidores'); return; }
   if (!observacionesActual.every(o => o !== "")) { showToast('Faltan observaciones'); return; }
+  if (!registrosFinalesActual.every(r => r !== "")) { showToast('Faltan registros finales'); return; }
   if (!document.getElementById('confirmar-check').checked) { showToast('Confirma la supervisión'); return; }
 
   const operario = document.getElementById('operario-select').value;
   const lote = getLote();
   const fecha = getFecha();
 
-  historial.push({lote, fecha, operario, medidores: loteActual, observaciones: observacionesActual});
+  // Guardar en historial local (últimos 10)
+  historial.push({lote, fecha, operario, medidores: loteActual, observaciones: observacionesActual, comentarios: comentariosActual, registrosFinales: registrosFinalesActual});
+  if (historial.length > MAX_HISTORIAL) historial = historial.slice(-MAX_HISTORIAL);
   localStorage.setItem('metrilab_historial', JSON.stringify(historial));
 
-  if (window.subirLoteAFirebase) {
-    const loteFirebase = {
-      lote, fecha, operario, cantidadMedidores: loteActual.length,
-      medidores: loteActual.map((d, i) => ({
-        serie_medidor: d.serie_medidor || null,
-        marca: d.marca || 'METREX',
-        modelo: d.modelo || 'G1.6',
-        registro: d.registro || null,
-        serie_precinto: d.serie_precinto || null,
-        observacion: observacionesActual[i] || 'NINGUNA'
-      }))
-    };
-    window.subirLoteAFirebase(loteFirebase);
-  }
-
   showToast('✨ Generando reporte...');
-  await generarZIP(loteActual, fotosActual, observacionesActual, operario, fecha, lote);
+  await generarZIP(loteActual, fotosActual, observacionesActual, comentariosActual, registrosFinalesActual, operario, fecha, lote);
 
   loteActual = [];
   fotosActual = [];
   observacionesActual = [];
+  comentariosActual = [];
+  registrosFinalesActual = [];
+  tiemposProcesamiento = [];
   document.getElementById('resultado-actual').innerHTML = '';
+  document.getElementById('warning-anomaly-container').innerHTML = '';
   document.getElementById('seccion-observaciones').style.display = 'none';
   document.getElementById('confirmar-check').checked = false;
   actualizarProgreso();
   iniciarRegistro();
 }
 
-async function generarZIP(datos, fotos, observaciones, operario, fecha, lote) {
+// GENERAR EXCEL + ZIP
+async function generarZIP(datos, fotos, observaciones, comentarios, registrosFinales, operario, fecha, lote) {
   const wb = new ExcelJS.Workbook();
   const ws = wb.addWorksheet('Registro');
 
-  const AZUL = '17375E';
-  const AZUL_CLARO = 'D9EAF7';
-  const VERDE = '2E8B57';
-  const VERDE_CLARO = 'EAF7EE';
-  const ROJO = 'C0392B';
-  const GRIS = 'F4F6F7';
-  const BLANCO = 'FFFFFF';
-  const AMARILLO = 'FCF3CF';
+  const AZUL = '17375E', AZUL_CLARO = 'D9EAF7', VERDE = '2E8B57', VERDE_CLARO = 'EAF7EE';
+  const ROJO = 'C0392B', GRIS = 'F4F6F7', BLANCO = 'FFFFFF', AMARILLO = 'FCF3CF';
   const AZUL_LINK = '1E40AF';
 
   const borde = {top:{style:'thin'}, left:{style:'thin'}, bottom:{style:'thin'}, right:{style:'thin'}};
   const bordeMedio = {top:{style:'medium'}, left:{style:'medium'}, bottom:{style:'medium'}, right:{style:'medium'}};
 
   const total = datos.length;
-  const anchos = [5, 10, 10, 16, 11, 10, 10, 16, 16, 10, 33, 5, 14, 5, 12, 8, 2.11];
+  const anchos = [5, 10, 10, 16, 11, 10, 10, 16, 16, 16, 12, 10, 25, 5, 14, 5, 12, 8, 2.11];
   anchos.forEach((a, i) => { ws.getColumn(i+1).width = a; });
 
   function aplicar(celda, valor, opts={}) {
@@ -763,28 +1039,28 @@ async function generarZIP(datos, fotos, observaciones, operario, fecha, lote) {
     c.border = opts.borde || borde;
   }
 
-  ws.mergeCells('A1:Q1');
+  ws.mergeCells('A1:S1');
   aplicar('A1', 'LABORATORIO DE MEDIDORES DE GAS', {negrita:true, tam:18, color_texto:BLANCO, color_fondo:AZUL, borde:bordeMedio});
   ws.getRow(1).height = 35;
-  ws.mergeCells('A2:Q2');
+  ws.mergeCells('A2:S2');
   aplicar('A2', 'Reporte automático de inspección y registro de medidores', {tam:10, italica:true, color_texto:'404040', color_fondo:GRIS});
   ws.getRow(2).height = 18;
   ws.mergeCells('A3:D3');
   aplicar('A3', `👤 Operario: ${operario}`, {negrita:true, color_fondo:AZUL_CLARO, alineacion:'left'});
-  ws.mergeCells('E3:J3');
+  ws.mergeCells('E3:L3');
   aplicar('E3', `📅 Fecha: ${fecha}`, {negrita:true, color_fondo:AZUL_CLARO});
-  ws.mergeCells('K3:Q3');
-  aplicar('K3', `🏷 Lote: ${lote}`, {negrita:true, color_texto:BLANCO, color_fondo:AZUL});
+  ws.mergeCells('M3:S3');
+  aplicar('M3', `🏷 Lote: ${lote}`, {negrita:true, color_texto:BLANCO, color_fondo:AZUL});
   ws.getRow(3).height = 22;
   ws.getRow(4).height = 6;
 
   const marcaT = datos[0]?.marca || 'METREX';
   const modeloT = datos[0]?.modelo || 'G1.6';
   const tarjetas = [
-    ['A5:D6', 'TOTAL DE\nMEDIDORES', String(total), AZUL_CLARO],
-    ['E5:H6', 'MARCA DEL\nLOTE', marcaT, VERDE_CLARO],
-    ['I5:L6', 'MODELO', modeloT, 'F4ECF7'],
-    ['M5:Q6', 'ESTADO DEL\nLOTE', 'APROBADO', VERDE_CLARO]
+    ['A5:E6', 'TOTAL DE\nMEDIDORES', String(total), AZUL_CLARO],
+    ['F5:J6', 'MARCA DEL\nLOTE', marcaT, VERDE_CLARO],
+    ['K5:N6', 'MODELO', modeloT, 'F4ECF7'],
+    ['O5:S6', 'ESTADO DEL\nLOTE', 'APROBADO', VERDE_CLARO]
   ];
   tarjetas.forEach(([rango, titulo, valor, color]) => {
     ws.mergeCells(rango);
@@ -794,11 +1070,11 @@ async function generarZIP(datos, fotos, observaciones, operario, fecha, lote) {
   ws.getRow(6).height = 28;
   ws.getRow(7).height = 6;
 
-  ws.mergeCells('A8:K8');
+  ws.mergeCells('A8:M8');
   aplicar('A8', 'RESUMEN DE MEDIDORES DEL LOTE', {negrita:true, tam:11, color_texto:BLANCO, color_fondo:AZUL});
   ws.getRow(8).height = 22;
 
-  const cols = ['#','Marca','Modelo','Nro. Serie Medidor','Vol. Cíclico','Tipo','Color','Nro. Serie Precinto','Registro Inicial (m³)','Foto','Observación'];
+  const cols = ['#','Marca','Modelo','Nro. Serie Medidor','Vol. Cíclico','Tipo','Color','Nro. Serie Precinto','Registro Inicial (m³)','Registro Final (m³)','Diferencia (m³)','Foto','Observación'];
   cols.forEach((h, i) => {
     aplicar(ws.getCell(9, i+1).address, h, {negrita:true, tam:9, color_texto:BLANCO, color_fondo:ROJO});
   });
@@ -810,15 +1086,26 @@ async function generarZIP(datos, fotos, observaciones, operario, fecha, lote) {
     const fila = 10 + i;
     const colorFila = i % 2 === 0 ? GRIS : BLANCO;
     const obs = observaciones[i] || 'NINGUNA';
-    const valores = [i+1, d.marca||'METREX', d.modelo||'G1.6', d.serie_medidor, '0.7 dm³', 'Circular', 'Verde', d.serie_precinto || 'N/D', `${d.registro} m³`, '', obs];
+
+    // Calcular diferencia
+    const regIni = parseFloat((d.registro || '0').replace(',', '.'));
+    const regFin = parseFloat((registrosFinales[i] || '0').replace(',', '.'));
+    const diff = (!isNaN(regIni) && !isNaN(regFin) && registrosFinales[i]) ? (regFin - regIni).toFixed(3).replace('.', ',') : 'N/D';
+
+    const valores = [
+      i+1, d.marca||'METREX', d.modelo||'G1.6', d.serie_medidor,
+      '0.7 dm³', 'Circular', 'Verde', d.serie_precinto || 'N/D',
+      `${d.registro} m³`, `${registrosFinales[i]} m³`, `${diff} m³`, '', obs
+    ];
     valores.forEach((v, j) => {
       const col = j + 1;
       let fondo = colorFila;
-      if (col === 11 && obs !== 'NINGUNA') fondo = 'FDEDEC';
+      if (col === 13 && obs !== 'NINGUNA') fondo = 'FDEDEC';
+      if (col === 11) fondo = 'D5F5E3';
       aplicar(ws.getCell(fila, col).address, v, {tam:9, color_fondo:fondo});
-      if (col === 11) ws.getCell(fila, col).alignment = {horizontal:'center', vertical:'middle', wrapText:false};
+      if (col === 13) ws.getCell(fila, col).alignment = {horizontal:'center', vertical:'middle', wrapText:false};
     });
-    const cLink = ws.getCell(fila, 10);
+    const cLink = ws.getCell(fila, 12);
     cLink.value = {text: `📷 Ver foto ${i+1}`, hyperlink: `imagenes/${nombresImagenes[i]}`};
     cLink.font = {bold:true, size:9, color:{argb:'FF'+AZUL_LINK}, underline:true};
     cLink.alignment = {horizontal:'center', vertical:'middle'};
@@ -827,8 +1114,30 @@ async function generarZIP(datos, fotos, observaciones, operario, fecha, lote) {
     ws.getRow(fila).height = 16;
   });
 
-  ws.mergeCells('L8:Q8');
-  aplicar('L8', 'DETALLES DEL LOTE', {negrita:true, tam:11, color_texto:BLANCO, color_fondo:AZUL});
+  // COMENTARIOS (si existen)
+  const filaComentariosInicio = 10 + total + 2;
+  const tieneComentarios = comentarios.some(c => c && c.trim() !== '');
+  if (tieneComentarios) {
+    ws.mergeCells(`A${filaComentariosInicio}:M${filaComentariosInicio}`);
+    aplicar(`A${filaComentariosInicio}`, 'COMENTARIOS ADICIONALES', {negrita:true, tam:11, color_texto:BLANCO, color_fondo:VERDE});
+    ws.getRow(filaComentariosInicio).height = 22;
+
+    let f = filaComentariosInicio + 1;
+    comentarios.forEach((c, i) => {
+      if (c && c.trim() !== '') {
+        ws.mergeCells(`A${f}:B${f}`);
+        aplicar(`A${f}`, `#${i+1} (Serie ${datos[i].serie_medidor})`, {negrita:true, tam:9, color_fondo:AZUL_CLARO, alineacion:'left'});
+        ws.mergeCells(`C${f}:M${f}`);
+        aplicar(`C${f}`, c, {tam:9, color_fondo:BLANCO, alineacion:'left'});
+        ws.getRow(f).height = 18;
+        f++;
+      }
+    });
+  }
+
+  // PANEL DETALLES
+  ws.mergeCells('N8:S8');
+  aplicar('N8', 'DETALLES DEL LOTE', {negrita:true, tam:11, color_texto:BLANCO, color_fondo:AZUL});
 
   const detalles = [
     ['Lote:', lote], ['Fecha y hora:', fecha], ['Operario:', operario],
@@ -838,23 +1147,23 @@ async function generarZIP(datos, fotos, observaciones, operario, fecha, lote) {
   ];
   detalles.forEach(([k, v], i) => {
     const f = 9 + i;
-    ws.mergeCells(`L${f}:M${f}`);
-    aplicar(`L${f}`, k, {negrita:true, tam:8, color_fondo:AZUL_CLARO, alineacion:'left'});
-    ws.mergeCells(`N${f}:Q${f}`);
-    aplicar(`N${f}`, v, {tam:8, color_fondo:BLANCO, alineacion:'left'});
+    ws.mergeCells(`N${f}:O${f}`);
+    aplicar(`N${f}`, k, {negrita:true, tam:8, color_fondo:AZUL_CLARO, alineacion:'left'});
+    ws.mergeCells(`P${f}:S${f}`);
+    aplicar(`P${f}`, v, {tam:8, color_fondo:BLANCO, alineacion:'left'});
     ws.getRow(f).height = 16;
   });
 
   const certFila = 9 + detalles.length + 1;
-  ws.mergeCells(`L${certFila}:Q${certFila+2}`);
-  aplicar(`L${certFila}`, `Certifico que el proceso fue supervisado correctamente\n— ${operario} —\n${fecha}`, {negrita:true, italica:true, tam:8, color_fondo:VERDE_CLARO, borde:bordeMedio});
+  ws.mergeCells(`N${certFila}:S${certFila+2}`);
+  aplicar(`N${certFila}`, `Certifico que el proceso fue supervisado correctamente\n— ${operario} —\n${fecha}`, {negrita:true, italica:true, tam:8, color_fondo:VERDE_CLARO, borde:bordeMedio});
   ws.getRow(certFila).height = 18;
   ws.getRow(certFila+1).height = 18;
   ws.getRow(certFila+2).height = 18;
 
   const estFila = certFila + 4;
-  ws.mergeCells(`L${estFila}:Q${estFila}`);
-  aplicar(`L${estFila}`, 'RESUMEN DE OBSERVACIONES', {negrita:true, tam:10, color_texto:BLANCO, color_fondo:VERDE});
+  ws.mergeCells(`N${estFila}:S${estFila}`);
+  aplicar(`N${estFila}`, 'RESUMEN DE OBSERVACIONES', {negrita:true, tam:10, color_texto:BLANCO, color_fondo:VERDE});
   ws.getRow(estFila).height = 20;
 
   const sinObs = observaciones.filter(o => o === 'NINGUNA').length;
@@ -862,17 +1171,12 @@ async function generarZIP(datos, fotos, observaciones, operario, fecha, lote) {
   const stats = [['Sin observación', sinObs, VERDE_CLARO], ['Con observación', conObs, AMARILLO]];
   stats.forEach(([n, v, c], i) => {
     const fr = estFila + 1 + i;
-    ws.mergeCells(`L${fr}:N${fr}`);
-    aplicar(`L${fr}`, n, {tam:9, color_fondo:c});
-    ws.mergeCells(`O${fr}:Q${fr}`);
-    aplicar(`O${fr}`, `${v} (${total ? Math.round(v/total*100) : 0}%)`, {negrita:true, tam:9, color_fondo:c});
+    ws.mergeCells(`N${fr}:P${fr}`);
+    aplicar(`N${fr}`, n, {tam:9, color_fondo:c});
+    ws.mergeCells(`Q${fr}:S${fr}`);
+    aplicar(`Q${fr}`, `${v} (${total ? Math.round(v/total*100) : 0}%)`, {negrita:true, tam:9, color_fondo:c});
     ws.getRow(fr).height = 16;
   });
-
-  const infoFila = 10 + total + 2;
-  ws.mergeCells(`A${infoFila}:K${infoFila}`);
-  aplicar(`A${infoFila}`, '💡 Las fotos están en la carpeta \'imagenes/\'. Haz clic en cada enlace para abrirlas.', {tam:10, italica:true, color_texto:'404040', color_fondo:AMARILLO});
-  ws.getRow(infoFila).height = 22;
 
   const excelBuffer = await wb.xlsx.writeBuffer();
   const zip = new JSZip();
