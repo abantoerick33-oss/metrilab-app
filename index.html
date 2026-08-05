@@ -1068,7 +1068,7 @@ async function generarZIP(datos, fotos, observaciones, comentarios, registrosFin
   ];
   tarjetas.forEach(([rango, titulo, valor, color]) => {
     ws.mergeCells(rango);
-    aplicar(rango.split(':')[0], `${titulo}\n\n${valor}`, {negrita:true, tam:11, color_fondo:color, borde:bordeMedio});
+    aplicar(rango.split(':')[0], `${titulo}\n${valor}`, {negrita:true, tam:11, color_fondo:color, borde:bordeMedio});
   });
   ws.getRow(5).height = 28;
   ws.getRow(6).height = 28;
