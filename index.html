@@ -511,9 +511,12 @@
     </div>
 
     <div class="glass-card">
-      <div class="section-title">⚙️ Configuración API</div>
-      <input class="input-box" type="password" id="nueva-key" placeholder="Nueva clave API">
-      <button class="btn-secondary" onclick="cambiarClave()">Actualizar clave</button>
+      <div class="section-title">⚙️ Configuración API (3 claves con rotación automática)</div>
+      <p style="font-size:11px;color:var(--text-secondary);margin-bottom:10px">Si una clave falla, se prueba con la siguiente automáticamente.</p>
+      <input class="input-box" type="password" id="nueva-key-1" placeholder="Clave API 1 (principal)">
+      <input class="input-box" type="password" id="nueva-key-2" placeholder="Clave API 2 (respaldo)">
+      <input class="input-box" type="password" id="nueva-key-3" placeholder="Clave API 3 (respaldo)">
+      <button class="btn-secondary" onclick="cambiarClaves()">Actualizar claves</button>
     </div>
 
     <button class="btn-red" onclick="limpiarDatos()">🗑️ Eliminar todos los datos</button>
@@ -643,12 +646,18 @@ function iniciarApp() {
   actualizarInicio();
 }
 
-function cambiarClave() {
-  const key = document.getElementById('nueva-key').value.trim();
-  if (!key) { showToast('Ingresa la nueva clave'); return; }
-  localStorage.setItem('metrilab_key', key);
-  document.getElementById('nueva-key').value = '';
-  showToast('Clave actualizada');
+function cambiarClaves() {
+  const key1 = document.getElementById('nueva-key-1').value.trim();
+  const key2 = document.getElementById('nueva-key-2').value.trim();
+  const key3 = document.getElementById('nueva-key-3').value.trim();
+  if (!key1 && !key2 && !key3) { showToast('Ingresa al menos una clave'); return; }
+  if (key1) localStorage.setItem('metrilab_key', key1);
+  if (key2) localStorage.setItem('metrilab_key_2', key2);
+  if (key3) localStorage.setItem('metrilab_key_3', key3);
+  document.getElementById('nueva-key-1').value = '';
+  document.getElementById('nueva-key-2').value = '';
+  document.getElementById('nueva-key-3').value = '';
+  showToast('Claves actualizadas correctamente');
 }
 
 // UTILIDADES
@@ -819,19 +828,32 @@ async function procesarFoto(input) {
     const imgOptimizada = await redimensionarImagen(e.target.result, 1024);
     const base64 = imgOptimizada.split(',')[1];
     const mime = 'image/jpeg';
-    const key = localStorage.getItem('metrilab_key');
+
+    // Las 3 claves rotan automáticamente si una falla
+    const CLAVES = [
+      localStorage.getItem('metrilab_key'),
+      localStorage.getItem('metrilab_key_2'),
+      localStorage.getItem('metrilab_key_3')
+    ].filter(k => k);
 
     let datos = null;
-    try {
-      const resp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${key}`, {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({contents:[{parts:[{text:PROMPT},{inline_data:{mime_type:mime,data:base64}}]}]})
-      });
-      const data = await resp.json();
-      const texto = data.candidates[0].content.parts[0].text.replace(/```json|```/g,'').trim();
-      datos = JSON.parse(texto);
-    } catch(err) { console.error(err); }
+    for (const key of CLAVES) {
+      try {
+        const resp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${key}`, {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({contents:[{parts:[{text:PROMPT},{inline_data:{mime_type:mime,data:base64}}]}]})
+        });
+        const data = await resp.json();
+        if (data.error) { continue; } // Si hay error, prueba la siguiente clave
+        const texto = data.candidates[0].content.parts[0].text.replace(/```json|```/g,'').trim();
+        datos = JSON.parse(texto);
+        break; // Si funciona, salir del bucle
+      } catch(err) {
+        console.error('Clave falló, probando siguiente:', err);
+        continue;
+      }
+    }
 
     if (datos) {
       // Rellenar defaults
