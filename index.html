@@ -1066,9 +1066,10 @@ async function generarZIP(datos, fotos, observaciones, comentarios, registrosFin
     ['K5:N6', 'MODELO', modeloT, 'F4ECF7'],
     ['O5:S6', 'ESTADO DEL\nLOTE', 'APROBADO', VERDE_CLARO]
   ];
+  const AZUL_OSCURO_TARJETA = '17375E';
   tarjetas.forEach(([rango, titulo, valor, color]) => {
     ws.mergeCells(rango);
-    aplicar(rango.split(':')[0], `${titulo}\n${valor}`, {negrita:true, tam:11, color_fondo:color, borde:bordeMedio});
+    aplicar(rango.split(':')[0], `${titulo}\n${valor}`, {negrita:true, tam:11, color_texto:'FFFFFF', color_fondo:AZUL_OSCURO_TARJETA, borde:bordeMedio});
   });
   ws.getRow(5).height = 28;
   ws.getRow(6).height = 28;
