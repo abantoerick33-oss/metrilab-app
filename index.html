@@ -7,8 +7,50 @@
   <title>MetriLab</title>
   <link rel="manifest" href="manifest.json">
   <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
-  <style>
+<script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+  import { getFirestore, collection, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyCpRopyllFTQu3puQtRlLWAy83JXXgvXI0",
+    authDomain: "metrilab-appjefe.firebaseapp.com",
+    projectId: "metrilab-appjefe",
+    storageBucket: "metrilab-appjefe.firebasestorage.app",
+    messagingSenderId: "407817648389",
+    appId: "1:407817648389:web:425dcf5f446ecd3a2f5f6c",
+    measurementId: "G-WBYTEMYJRK"
+  };
+  const appFirebase = initializeApp(firebaseConfig);
+  const db = getFirestore(appFirebase);
+
+  window.guardarLoteEnFirebase = async function(lote, operario, fecha, medidores, observaciones, registrosFinales) {
+    try {
+      const medidoresFirestore = medidores.map((m, i) => ({
+        serie_medidor: m.serie_medidor || '',
+        registro: String(m.registro || '0'),
+        registro_final: String(registrosFinales[i] || m.registro || '0'),
+        unidad: 'm³',
+        serie_precinto: m.serie_precinto || 'N/D',
+        observacion: observaciones[i] || 'NINGUNA'
+      }));
+      await addDoc(collection(db, "lotes"), {
+        lote, operario, fecha,
+        cantidadMedidores: medidores.length,
+        medidores: medidoresFirestore,
+        origen: "app",
+        eliminado: false,
+        motivoEliminacion: "",
+        creado: serverTimestamp()
+      });
+      return true;
+    } catch (e) {
+      console.error("Error guardando lote en Firebase:", e);
+      return false;
+    }
+  };
+</script>
+<style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
@@ -1022,6 +1064,11 @@ async function finalizarLote() {
   historial.push({lote, fecha, operario, medidores: loteActual, observaciones: observacionesActual, comentarios: comentariosActual, registrosFinales: registrosFinalesActual});
   if (historial.length > MAX_HISTORIAL) historial = historial.slice(-MAX_HISTORIAL);
   localStorage.setItem('metrilab_historial', JSON.stringify(historial));
+
+  // Sincronizar con el panel del jefe (Firebase)
+  window.guardarLoteEnFirebase(lote, operario, fecha, loteActual, observacionesActual, registrosFinalesActual).then(ok => {
+    if (!ok) showToast('⚠️ No se pudo sincronizar con el panel del jefe');
+  });
 
   showToast('✨ Generando reporte...');
   await generarZIP(loteActual, fotosActual, observacionesActual, comentariosActual, registrosFinalesActual, operario, fecha, lote);
