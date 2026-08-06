@@ -125,6 +125,30 @@
       font-size: 11px;
       font-weight: 600;
     }
+    .lote-badge.eliminado {
+      background: rgba(231, 76, 60, 0.2);
+      color: #E74C3C;
+      border-color: rgba(231, 76, 60, 0.4);
+    }
+    .lote-card.eliminado { opacity: 0.6; }
+    .lote-motivo {
+      font-size: 11px;
+      color: #E74C3C;
+      background: rgba(231, 76, 60, 0.1);
+      border: 1px solid rgba(231, 76, 60, 0.25);
+      border-radius: 8px;
+      padding: 6px 10px;
+      margin-bottom: 10px;
+    }
+    .origen-tag {
+      font-size: 10px;
+      padding: 2px 8px;
+      border-radius: 6px;
+      font-weight: 600;
+      margin-left: 8px;
+    }
+    .origen-tag.web { background: rgba(0, 212, 255, 0.15); color: #00D4FF; border: 1px solid rgba(0, 212, 255, 0.3); }
+    .origen-tag.app { background: rgba(155, 89, 246, 0.15); color: #9B59F6; border: 1px solid rgba(155, 89, 246, 0.3); }
     .lote-info {
       display: flex; gap: 20px; flex-wrap: wrap;
       font-size: 12px; color: rgba(255,255,255,0.6);
@@ -232,6 +256,12 @@
     <button class="filter-btn" onclick="filtrar('Marco')">Marco</button>
   </div>
 
+  <div class="filter-bar" id="filter-bar-estado">
+    <button class="filter-btn active" onclick="filtrarEstado('todos')">Todos los estados</button>
+    <button class="filter-btn" onclick="filtrarEstado('activos')">✅ Activos</button>
+    <button class="filter-btn" onclick="filtrarEstado('eliminados')">❌ Eliminados</button>
+  </div>
+
   <div id="lista-lotes">
     <div class="loading">
       <div class="spinner"></div>
@@ -259,6 +289,7 @@ const db = getFirestore(app);
 
 let todosLotes = [];
 let filtroActual = 'todos';
+let filtroEstado = 'todos';
 
 const q = query(collection(db, "lotes"), orderBy("creado", "desc"));
 
@@ -276,7 +307,14 @@ onSnapshot(q, (snapshot) => {
 
 window.filtrar = function(operario) {
   filtroActual = operario;
-  document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('#filter-bar .filter-btn').forEach(b => b.classList.remove('active'));
+  event.target.classList.add('active');
+  actualizarPanel();
+};
+
+window.filtrarEstado = function(estado) {
+  filtroEstado = estado;
+  document.querySelectorAll('#filter-bar-estado .filter-btn').forEach(b => b.classList.remove('active'));
   event.target.classList.add('active');
   actualizarPanel();
 };
@@ -289,16 +327,22 @@ window.toggleDetalles = function(id) {
 function actualizarPanel() {
   let lotesFiltrados = todosLotes;
   if (filtroActual !== 'todos') {
-    lotesFiltrados = todosLotes.filter(l =>
+    lotesFiltrados = lotesFiltrados.filter(l =>
       (l.operario || '').toLowerCase().includes(filtroActual.toLowerCase())
     );
   }
+  if (filtroEstado === 'activos') {
+    lotesFiltrados = lotesFiltrados.filter(l => !l.eliminado);
+  } else if (filtroEstado === 'eliminados') {
+    lotesFiltrados = lotesFiltrados.filter(l => l.eliminado);
+  }
 
-  document.getElementById('total-lotes').textContent = todosLotes.length;
-  document.getElementById('total-medidores').textContent = todosLotes.reduce((a, l) => a + (l.cantidadMedidores || (l.medidores?.length || 0)), 0);
+  const lotesActivos = todosLotes.filter(l => !l.eliminado);
+  document.getElementById('total-lotes').textContent = lotesActivos.length;
+  document.getElementById('total-medidores').textContent = lotesActivos.reduce((a, l) => a + (l.cantidadMedidores || (l.medidores?.length || 0)), 0);
 
   const hoy = new Date().toLocaleDateString('es-PE', {timeZone: 'America/Lima'});
-  const lotesHoy = todosLotes.filter(l => {
+  const lotesHoy = lotesActivos.filter(l => {
     if (!l.fecha) return false;
     return l.fecha.includes(hoy.replaceAll('/', '/')) || (l.creado && new Date(l.creado.seconds * 1000).toLocaleDateString('es-PE', {timeZone: 'America/Lima'}) === hoy);
   });
@@ -314,12 +358,16 @@ function actualizarPanel() {
     return;
   }
 
-  contenedor.innerHTML = lotesFiltrados.map(l => `
-    <div class="lote-card">
+  contenedor.innerHTML = lotesFiltrados.map(l => {
+    const origen = (l.origen || 'app') === 'web' ? 'web' : 'app';
+    const origenLabel = origen === 'web' ? '🌐 Web' : '📱 App móvil';
+    return `
+    <div class="lote-card ${l.eliminado ? 'eliminado' : ''}">
       <div class="lote-header">
-        <div class="lote-title">${l.lote || 'Sin código'}</div>
-        <span class="lote-badge">✓ OK</span>
+        <div class="lote-title">${l.lote || 'Sin código'}<span class="origen-tag ${origen}">${origenLabel}</span></div>
+        <span class="lote-badge ${l.eliminado ? 'eliminado' : ''}">${l.eliminado ? '❌ Eliminado' : '✓ OK'}</span>
       </div>
+      ${l.eliminado ? `<div class="lote-motivo">🗑️ Motivo de eliminación: ${l.motivoEliminacion || 'Sin especificar'}</div>` : ''}
       <div class="lote-info">
         <span>👤 <strong>${l.operario || 'Sin operario'}</strong></span>
         <span>📅 <strong>${l.fecha || 'Sin fecha'}</strong></span>
@@ -330,7 +378,8 @@ function actualizarPanel() {
         ${renderMedidores(l.medidores || [])}
       </div>
     </div>
-  `).join('');
+  `;
+  }).join('');
 }
 
 function renderMedidores(medidores) {
