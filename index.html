@@ -10,7 +10,7 @@
 <script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-  import { getFirestore, collection, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+  import { getFirestore, collection, addDoc, doc, updateDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
   const firebaseConfig = {
     apiKey: "AIzaSyCpRopyllFTQu3puQtRlLWAy83JXXgvXI0",
@@ -34,7 +34,7 @@
         serie_precinto: m.serie_precinto || 'N/D',
         observacion: observaciones[i] || 'NINGUNA'
       }));
-      await addDoc(collection(db, "lotes"), {
+      const docRef = await addDoc(collection(db, "lotes"), {
         lote, operario, fecha,
         cantidadMedidores: medidores.length,
         medidores: medidoresFirestore,
@@ -43,6 +43,26 @@
         motivoEliminacion: "",
         creado: serverTimestamp()
       });
+      return docRef.id;
+    } catch (e) {
+      console.error("Error guardando lote en Firebase:", e);
+      return null;
+    }
+  };
+
+  window.eliminarLoteEnFirebase = async function(firebaseId, motivo) {
+    if (!firebaseId) return false;
+    try {
+      await updateDoc(doc(db, "lotes", firebaseId), {
+        eliminado: true,
+        motivoEliminacion: motivo
+      });
+      return true;
+    } catch (e) {
+      console.error("Error eliminando lote en Firebase:", e);
+      return false;
+    }
+  };
       return true;
     } catch (e) {
       console.error("Error guardando lote en Firebase:", e);
@@ -757,7 +777,7 @@ function iniciarRegistro() {
 
 function actualizarInicio() {
   const fechaISO = getFechaISO();
-  const lotesHoy = historial.filter(l => l.lote.includes(`-VP-${fechaISO}`));
+  const lotesHoy = historial.filter(l => !l.eliminado && l.lote.includes(`-VP-${fechaISO}`));
   document.getElementById('lotes-hoy').textContent = lotesHoy.length;
   const totalMed = lotesHoy.reduce((a,l) => a + l.medidores.length, 0);
   document.getElementById('medidores-hoy').textContent = totalMed;
@@ -774,7 +794,7 @@ function actualizarInicio() {
     contenedor.innerHTML = `<div class="empty-state"><p>No hay lotes aún</p><span>El laboratorio espera...</span></div>`;
     return;
   }
-  contenedor.innerHTML = [...historial].reverse().slice(0,5).map(l => `
+  contenedor.innerHTML = [...historial].filter(l => !l.eliminado).reverse().slice(0,5).map(l => `
     <div class="lote-row">
       <div>
         <div class="lote-title">${l.lote}</div>
@@ -791,21 +811,45 @@ function actualizarHistorial() {
     return;
   }
   contenedor.innerHTML = [...historial].reverse().map(l => `
-    <div class="glass-card">
+    <div class="glass-card" style="${l.eliminado ? 'opacity:0.55' : ''}">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
         <span style="font-size:14px;font-weight:600;color:var(--text-main)">${l.lote}</span>
-        <span class="badge">OK</span>
+        <span class="badge" style="${l.eliminado ? 'background:rgba(220,38,38,0.15);color:#ef4444;border-color:rgba(220,38,38,0.3)' : ''}">${l.eliminado ? '❌ Eliminado' : '✓ OK'}</span>
       </div>
       <div style="font-size:12px;color:var(--text-secondary);margin-bottom:6px">${l.fecha} · ${l.operario}</div>
       <div style="font-size:12px;color:var(--text-main)">${l.medidores.length} medidores registrados</div>
+      ${l.eliminado
+        ? `<div style="font-size:11px;color:#ef4444;background:rgba(220,38,38,0.08);border:1px solid rgba(220,38,38,0.2);border-radius:8px;padding:6px 10px;margin-top:8px">🗑️ Motivo: ${l.motivo || 'Sin especificar'}</div>`
+        : `<button class="btn-delete" style="margin-top:8px;width:100%;padding:8px" onclick="eliminarLoteHistorial('${l.lote}')">🗑️ Eliminar lote</button>`
+      }
     </div>`).join('');
 }
 
+window.eliminarLoteHistorial = async function(loteCodigo) {
+  const item = historial.find(h => h.lote === loteCodigo);
+  if (!item || item.eliminado) return;
+  const motivo = prompt(`¿Por qué quieres eliminar el lote ${loteCodigo}?\n(Este motivo quedará registrado)`);
+  if (motivo === null) return;
+  if (!motivo.trim()) { showToast('Debes escribir un motivo'); return; }
+  item.eliminado = true;
+  item.motivo = motivo.trim();
+  localStorage.setItem('metrilab_historial', JSON.stringify(historial));
+  showToast('Lote marcado como eliminado');
+  actualizarHistorial();
+  if (item.firebaseId) {
+    const ok = await window.eliminarLoteEnFirebase(item.firebaseId, item.motivo);
+    if (!ok) showToast('⚠️ No se pudo avisar al panel del jefe');
+  } else {
+    showToast('⚠️ Este lote no se sincronizó con el panel del jefe');
+  }
+};
+
 function actualizarAdmin() {
-  document.getElementById('admin-total-lotes').textContent = historial.length;
-  document.getElementById('admin-total-medidores').textContent = historial.reduce((a,l) => a + l.medidores.length, 0);
-  document.getElementById('admin-lotes-joseph').textContent = `${historial.filter(l=>l.operario.includes('Joseph')).length} lotes`;
-  document.getElementById('admin-lotes-marco').textContent = `${historial.filter(l=>l.operario.includes('Marco')).length} lotes`;
+  const activos = historial.filter(l => !l.eliminado);
+  document.getElementById('admin-total-lotes').textContent = activos.length;
+  document.getElementById('admin-total-medidores').textContent = activos.reduce((a,l) => a + l.medidores.length, 0);
+  document.getElementById('admin-lotes-joseph').textContent = `${activos.filter(l=>l.operario.includes('Joseph')).length} lotes`;
+  document.getElementById('admin-lotes-marco').textContent = `${activos.filter(l=>l.operario.includes('Marco')).length} lotes`;
 }
 
 // OPTIMIZACIÓN DE IMAGEN
@@ -1061,13 +1105,19 @@ async function finalizarLote() {
   const fecha = getFecha();
 
   // Guardar en historial local (últimos 10)
-  historial.push({lote, fecha, operario, medidores: loteActual, observaciones: observacionesActual, comentarios: comentariosActual, registrosFinales: registrosFinalesActual});
+  const nuevoLote = {lote, fecha, operario, medidores: loteActual, observaciones: observacionesActual, comentarios: comentariosActual, registrosFinales: registrosFinalesActual, firebaseId: null, eliminado: false, motivo: null};
+  historial.push(nuevoLote);
   if (historial.length > MAX_HISTORIAL) historial = historial.slice(-MAX_HISTORIAL);
   localStorage.setItem('metrilab_historial', JSON.stringify(historial));
 
   // Sincronizar con el panel del jefe (Firebase)
-  window.guardarLoteEnFirebase(lote, operario, fecha, loteActual, observacionesActual, registrosFinalesActual).then(ok => {
-    if (!ok) showToast('⚠️ No se pudo sincronizar con el panel del jefe');
+  window.guardarLoteEnFirebase(lote, operario, fecha, loteActual, observacionesActual, registrosFinalesActual).then(id => {
+    if (id) {
+      nuevoLote.firebaseId = id;
+      localStorage.setItem('metrilab_historial', JSON.stringify(historial));
+    } else {
+      showToast('⚠️ No se pudo sincronizar con el panel del jefe');
+    }
   });
 
   showToast('✨ Generando reporte...');
