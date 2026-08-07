@@ -274,10 +274,9 @@
     <button class="filter-btn" onclick="filtrar('Marco')">Marco</button>
   </div>
 
-  <div class="filter-bar" id="filter-bar-estado">
-    <button class="filter-btn active" onclick="filtrarEstado('todos')">Todos los estados</button>
-    <button class="filter-btn" onclick="filtrarEstado('activos')">✅ Activos</button>
-    <button class="filter-btn" onclick="filtrarEstado('eliminados')">❌ Eliminados</button>
+  <button class="filter-btn" onclick="filtrarEstado('todos')">Todos los estados</button>
+    <button class="filter-btn active" onclick="filtrarEstado('activos')">✅ Activos</button>
+    <button class="filter-btn" id="btn-filtro-eliminados" onclick="filtrarEstado('eliminados')">❌ Eliminados</button>
   </div>
 
   <div id="lista-lotes">
@@ -307,7 +306,7 @@ const db = getFirestore(app);
 
 let todosLotes = [];
 let filtroActual = 'todos';
-let filtroEstado = 'todos';
+let filtroEstado = 'activos';
 
 const q = query(collection(db, "lotes"), orderBy("creado", "desc"));
 
@@ -365,6 +364,9 @@ function actualizarPanel() {
     return l.fecha.includes(hoy.replaceAll('/', '/')) || (l.creado && new Date(l.creado.seconds * 1000).toLocaleDateString('es-PE', {timeZone: 'America/Lima'}) === hoy);
   });
   document.getElementById('lotes-hoy').textContent = lotesHoy.length;
+
+  const totalEliminados = todosLotes.filter(l => l.eliminado).length;
+  document.getElementById('btn-filtro-eliminados').textContent = `❌ Eliminados (${totalEliminados})`;
 
   const contenedor = document.getElementById('lista-lotes');
   if (lotesFiltrados.length === 0) {
