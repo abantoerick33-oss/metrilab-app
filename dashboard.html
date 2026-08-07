@@ -8,7 +8,7 @@
   <link rel="icon" type="image/png" href="icon-jefe.png">
   <link rel="apple-touch-icon" href="icon-jefe.png">
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
@@ -320,40 +320,102 @@ function renderCharts(porDia, operarios, origenes, diasEnMes) {
   });
 }
 
-window.descargarExcel = function() {
+window.descargarExcel = async function() {
   if (!mesSeleccionado) { alert('No hay datos para descargar todavía'); return; }
   const lotesDelMes = todosLotes.filter(l => mesKeyDeLote(l) === mesSeleccionado);
+  const activos = lotesDelMes.filter(l => !l.eliminado);
+  const eliminados = lotesDelMes.filter(l => l.eliminado);
+  const totalMedidores = activos.reduce((a, l) => a + (l.cantidadMedidores || (l.medidores?.length || 0)), 0);
 
-  const filasLotes = lotesDelMes.map(l => ({
-    Lote: l.lote || '',
-    Operario: l.operario || '',
-    Fecha: l.fecha || '',
-    Origen: (l.origen || 'app') === 'web' ? 'Web' : 'App móvil',
-    CantidadMedidores: l.cantidadMedidores || (l.medidores?.length || 0),
-    Estado: l.eliminado ? 'Eliminado' : 'Activo',
-    MotivoEliminacion: l.motivoEliminacion || ''
-  }));
+  const AZUL = '17375E', VERDE = '2E8B57', ROJO = 'C0392B', GRIS = 'F4F6F7', BLANCO = 'FFFFFF', MORADO = '8E44AD';
+  const borde = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
+  const bordeMedio = { top: { style: 'medium' }, left: { style: 'medium' }, bottom: { style: 'medium' }, right: { style: 'medium' } };
 
-  const filasMedidores = [];
+  function aplicar(ws, celda, valor, opts = {}) {
+    const c = ws.getCell(celda);
+    c.value = valor;
+    c.font = { bold: opts.negrita || false, size: opts.tam || 10, color: { argb: 'FF' + (opts.color_texto || '000000') }, italic: opts.italica || false };
+    c.alignment = { horizontal: opts.alineacion || 'center', vertical: 'middle', wrapText: opts.wrap !== false };
+    if (opts.color_fondo) c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF' + opts.color_fondo } };
+    c.border = opts.borde || borde;
+  }
+
+  const wb = new ExcelJS.Workbook();
+
+  const ws1 = wb.addWorksheet('Resumen por lote');
+  [18, 26, 16, 12, 12, 12, 30].forEach((a, i) => { ws1.getColumn(i + 1).width = a; });
+
+  ws1.mergeCells('A1:G1');
+  aplicar(ws1, 'A1', 'METRILAB · RESUMEN MENSUAL DE LOTES', { negrita: true, tam: 16, color_texto: BLANCO, color_fondo: AZUL, borde: bordeMedio });
+  ws1.getRow(1).height = 30;
+
+  ws1.mergeCells('A2:G2');
+  aplicar(ws1, 'A2', `Mes: ${mesLabel(mesSeleccionado)} · Generado el ${new Date().toLocaleString('es-PE', { timeZone: 'America/Lima' })}`, { tam: 10, italica: true, color_texto: '404040', color_fondo: GRIS });
+  ws1.getRow(2).height = 18;
+  ws1.getRow(3).height = 6;
+
+  const tarjetas = [
+    ['A4:B5', 'LOTES DEL MES', String(activos.length), AZUL],
+    ['C4:D5', 'MEDIDORES', String(totalMedidores), VERDE],
+    ['E4:F5', 'PROMEDIO/LOTE', activos.length ? (totalMedidores / activos.length).toFixed(1) : '0', MORADO],
+    ['G4:G5', 'ELIMINADOS', String(eliminados.length), ROJO]
+  ];
+  tarjetas.forEach(([rango, titulo, valor, color]) => {
+    ws1.mergeCells(rango);
+    aplicar(ws1, rango.split(':')[0], `${titulo}\n${valor}`, { negrita: true, tam: 11, color_texto: BLANCO, color_fondo: color, borde: bordeMedio });
+  });
+  ws1.getRow(4).height = 26;
+  ws1.getRow(5).height = 26;
+  ws1.getRow(6).height = 6;
+
+  const headers1 = ['Lote', 'Operario', 'Fecha', 'Origen', 'Medidores', 'Estado', 'Motivo eliminación'];
+  headers1.forEach((h, i) => { aplicar(ws1, ws1.getCell(7, i + 1).address, h, { negrita: true, tam: 10, color_texto: BLANCO, color_fondo: ROJO }); });
+  ws1.getRow(7).height = 20;
+
+  activos.concat(eliminados).forEach((l, i) => {
+    const fila = 8 + i;
+    const colorFila = l.eliminado ? 'FDEDEC' : (i % 2 === 0 ? GRIS : BLANCO);
+    const valores = [
+      l.lote || '', l.operario || '', l.fecha || '',
+      (l.origen || 'app') === 'web' ? '🌐 Web' : '📱 App móvil',
+      l.cantidadMedidores || (l.medidores?.length || 0),
+      l.eliminado ? '❌ Eliminado' : '✓ Activo',
+      l.motivoEliminacion || ''
+    ];
+    valores.forEach((v, j) => { aplicar(ws1, ws1.getCell(fila, j + 1).address, v, { tam: 9, color_fondo: colorFila, alineacion: (j === 1 || j === 6) ? 'left' : 'center' }); });
+    ws1.getRow(fila).height = 16;
+  });
+
+  const ws2 = wb.addWorksheet('Detalle medidores');
+  [18, 26, 16, 16, 16, 16, 16, 30].forEach((a, i) => { ws2.getColumn(i + 1).width = a; });
+
+  ws2.mergeCells('A1:H1');
+  aplicar(ws2, 'A1', 'DETALLE DE MEDIDORES POR LOTE', { negrita: true, tam: 14, color_texto: BLANCO, color_fondo: AZUL, borde: bordeMedio });
+  ws2.getRow(1).height = 26;
+
+  const headers2 = ['Lote', 'Operario', 'Fecha', 'Serie medidor', 'Registro inicial', 'Registro final', 'Precinto', 'Observación'];
+  headers2.forEach((h, i) => { aplicar(ws2, ws2.getCell(3, i + 1).address, h, { negrita: true, tam: 10, color_texto: BLANCO, color_fondo: ROJO }); });
+  ws2.getRow(3).height = 20;
+
+  let fila2 = 4;
   lotesDelMes.forEach(l => {
-    (l.medidores || []).forEach(m => {
-      filasMedidores.push({
-        Lote: l.lote || '',
-        Operario: l.operario || '',
-        Fecha: l.fecha || '',
-        SerieMedidor: m.serie_medidor || '',
-        RegistroInicial: m.registro || '',
-        RegistroFinal: m.registro_final || '',
-        Precinto: m.serie_precinto || '',
-        Observacion: m.observacion || 'NINGUNA'
-      });
+    (l.medidores || []).forEach((m, idx) => {
+      const colorFila = idx % 2 === 0 ? GRIS : BLANCO;
+      const obsColor = (m.observacion && m.observacion !== 'NINGUNA') ? 'FDEDEC' : colorFila;
+      const valores = [l.lote || '', l.operario || '', l.fecha || '', m.serie_medidor || '', m.registro || '', m.registro_final || '', m.serie_precinto || '', m.observacion || 'NINGUNA'];
+      valores.forEach((v, j) => { aplicar(ws2, ws2.getCell(fila2, j + 1).address, v, { tam: 9, color_fondo: j === 7 ? obsColor : colorFila, alineacion: (j === 1 || j === 7) ? 'left' : 'center' }); });
+      ws2.getRow(fila2).height = 16;
+      fila2++;
     });
   });
 
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(filasLotes), 'Resumen por lote');
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(filasMedidores), 'Detalle medidores');
-  XLSX.writeFile(wb, `MetriLab_Dashboard_${mesSeleccionado}.xlsx`);
+  const buffer = await wb.xlsx.writeBuffer();
+  const blob = new Blob([buffer], { type: 'application/octet-stream' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `MetriLab_Dashboard_${mesSeleccionado}.xlsx`;
+  a.click();
 };
 </script>
 </body>
