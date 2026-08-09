@@ -63,11 +63,6 @@
       return false;
     }
   };
-    } catch (e) {
-      console.error("Error guardando lote en Firebase:", e);
-      return false;
-    }
-  };
 </script>
 <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -1098,6 +1093,10 @@ async function finalizarLote() {
   if (!observacionesActual.every(o => o !== "")) { showToast('Faltan observaciones'); return; }
   if (!registrosFinalesActual.every(r => r !== "")) { showToast('Faltan registros finales'); return; }
   if (!document.getElementById('confirmar-check').checked) { showToast('Confirma la supervisión'); return; }
+  if (typeof window.guardarLoteEnFirebase !== 'function') {
+    showToast('⚠️ Aún está cargando la conexión con el panel del jefe. Espera 2-3 segundos e inténtalo de nuevo.');
+    return;
+  }
 
   const operario = document.getElementById('operario-select').value;
   const lote = getLote();
@@ -1110,7 +1109,12 @@ async function finalizarLote() {
   const datosRegistrosFinales = registrosFinalesActual;
 
   showToast('☁️ Sincronizando con el panel del jefe...');
-  const firebaseId = await window.guardarLoteEnFirebase(lote, operario, fecha, datosLote, datosObservaciones, datosRegistrosFinales);
+  let firebaseId = null;
+  try {
+    firebaseId = await window.guardarLoteEnFirebase(lote, operario, fecha, datosLote, datosObservaciones, datosRegistrosFinales);
+  } catch (e) {
+    console.error('Error inesperado sincronizando con Firebase:', e);
+  }
   if (!firebaseId) {
     showToast('⚠️ No se pudo sincronizar con el panel del jefe, pero el reporte se generará igual');
   }
