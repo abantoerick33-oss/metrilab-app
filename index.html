@@ -26,8 +26,9 @@
 
   window.guardarLoteEnFirebase = async function(lote, operario, fecha, medidores, observaciones, registrosFinales) {
     try {
-      const medidoresFirestore = medidores.map((m, i) => ({
+     const medidoresFirestore = medidores.map((m, i) => ({
         serie_medidor: m.serie_medidor || '',
+        anio: m.anio_medidor || 'N/D',
         registro: String(m.registro || '0'),
         registro_final: String(registrosFinales[i] || m.registro || '0'),
         unidad: 'm³',
@@ -632,6 +633,7 @@ Debes devolver EXCLUSIVAMENTE un objeto JSON con este esquema EXACTO, sin texto 
   "marca": "string o null",
   "modelo": "string o null",
   "serie_medidor": "string o null",
+  "anio_medidor": "string o null",
   "registro": "string o null",
   "unidad": "string o null",
   "volumen_ciclico": "string o null",
@@ -643,13 +645,14 @@ REGLAS DETALLADAS PARA CADA CAMPO:
 - marca: fabricante impreso en placa (ej: "METREX", "APOLO").
 - modelo: capacidad con punto decimal (ej: "G1.6", "G2.5"). Nunca G1,6 ni G16.
 - serie_medidor: número de serie del medidor sin letras.
+- anio_medidor: año de fabricación del medidor, 4 dígitos, impreso justo al lado o debajo del número de serie (ej: si el número de serie dice "0126896  2020", el año es "2020"). Es un año típicamente entre 2005 y el año actual.
 - registro: SOLAMENTE los 5 primeros dígitos del contador (los enteros que están ANTES de la coma). NO incluyas la coma ni los dígitos rojos. Ejemplos: si ves "00123,422" devuelve "00123". Si ves "00954,095" devuelve "00954". Si ves "016869,247" devuelve "01686".
 - unidad: unidad medida (siempre "m3").
 - volumen_ciclico: valor V (siempre "0.7 dm3").
 - serie_precinto: formato OBLIGATORIO G + 7 dígitos (ej: "G0454825"). Puede estar rotado en cualquier ángulo. Intenta leer rotando mentalmente si ves letras raras.
 
 EJEMPLO DE RESPUESTA CORRECTA (para un medidor que muestra "00123,422"):
-{"marca":"METREX","modelo":"G1.6","serie_medidor":"0087456","registro":"00123","unidad":"m3","volumen_ciclico":"0.7 dm3","serie_precinto":"G0372098"}
+{"marca":"METREX","modelo":"G1.6","serie_medidor":"0087456","anio_medidor":"2021","registro":"00123","unidad":"m3","volumen_ciclico":"0.7 dm3","serie_precinto":"G0372098"}
 
 Si algún campo no es visible o legible, usa null. Devuelve SOLO el JSON, sin markdown, sin explicaciones.`;
 
@@ -967,6 +970,7 @@ async function procesarFoto(input) {
           <div class="resultado-row"><span class="resultado-key">Marca</span><span class="resultado-val">${datos.marca}</span></div>
           <div class="resultado-row"><span class="resultado-key">Modelo</span><span class="resultado-val">${datos.modelo}</span></div>
           <div class="resultado-row"><span class="resultado-key">Serie</span><span class="resultado-val">${datos.serie_medidor || 'FALTA'}</span></div>
+          <div class="resultado-row"><span class="resultado-key">Año</span><span class="resultado-val">${datos.anio_medidor || 'N/D'}</span></div>
           <div class="resultado-row"><span class="resultado-key">Registro</span><span class="resultado-val">${datos.registro || 'FALTA'} ${datos.unidad}</span></div>
           <div class="resultado-row"><span class="resultado-key">Precinto</span><span class="resultado-val">${datos.serie_precinto||'N/D'}</span></div>
         </div>`;
@@ -1012,7 +1016,7 @@ function renderObservaciones() {
         <div class="medidor-num">#${i+1}</div>
         <button class="btn-delete" onclick="eliminarMedidor(${i})">🗑️ Eliminar</button>
       </div>
-      <div class="medidor-data">Serie: ${d.serie_medidor || 'FALTA'} · Registro inicial: ${d.registro || 'FALTA'} ${d.unidad || ''}</div>
+      <div class="medidor-data">Serie: ${d.serie_medidor || 'FALTA'} · Año: ${d.anio_medidor || 'N/D'} · Registro inicial: ${d.registro || 'FALTA'} ${d.unidad || ''}</div>
       ${camposFaltantes}
       <select class="medidor-select ${observacionesActual[i]?'':'empty'}" onchange="cambiarObservacion(${i}, this.value)">
         <option value="">— Selecciona observación —</option>
@@ -1158,7 +1162,7 @@ async function generarZIP(datos, fotos, observaciones, comentarios, registrosFin
   const bordeMedio = {top:{style:'medium'}, left:{style:'medium'}, bottom:{style:'medium'}, right:{style:'medium'}};
 
   const total = datos.length;
-  const anchos = [5, 10, 10, 16, 11, 10, 10, 16, 16, 16, 12, 10, 25, 5, 14, 5, 12, 8, 2.11];
+  const anchos = [5, 10, 10, 16, 10, 11, 10, 10, 16, 16, 16, 12, 10, 25, 5, 14, 5, 12, 8, 2.11];
   anchos.forEach((a, i) => { ws.getColumn(i+1).width = a; });
 
   function aplicar(celda, valor, opts={}) {
@@ -1170,18 +1174,18 @@ async function generarZIP(datos, fotos, observaciones, comentarios, registrosFin
     c.border = opts.borde || borde;
   }
 
-  ws.mergeCells('A1:S1');
+ ws.mergeCells('A1:T1');
   aplicar('A1', 'LABORATORIO DE MEDIDORES DE GAS', {negrita:true, tam:18, color_texto:BLANCO, color_fondo:AZUL, borde:bordeMedio});
   ws.getRow(1).height = 35;
-  ws.mergeCells('A2:S2');
+  ws.mergeCells('A2:T2');
   aplicar('A2', 'Reporte automático de inspección y registro de medidores', {tam:10, italica:true, color_texto:'404040', color_fondo:GRIS});
   ws.getRow(2).height = 18;
   ws.mergeCells('A3:D3');
   aplicar('A3', `👤 Operario: ${operario}`, {negrita:true, color_fondo:AZUL_CLARO, alineacion:'left'});
-  ws.mergeCells('E3:L3');
+  ws.mergeCells('E3:M3');
   aplicar('E3', `📅 Fecha: ${fecha}`, {negrita:true, color_fondo:AZUL_CLARO});
-  ws.mergeCells('M3:S3');
-  aplicar('M3', `🏷 Lote: ${lote}`, {negrita:true, color_texto:BLANCO, color_fondo:AZUL});
+  ws.mergeCells('N3:T3');
+  aplicar('N3', `🏷 Lote: ${lote}`, {negrita:true, color_texto:BLANCO, color_fondo:AZUL});
   ws.getRow(3).height = 22;
   ws.getRow(4).height = 6;
 
