@@ -63,7 +63,6 @@
       return false;
     }
   };
-      return true;
     } catch (e) {
       console.error("Error guardando lote en Firebase:", e);
       return false;
@@ -1104,24 +1103,25 @@ async function finalizarLote() {
   const lote = getLote();
   const fecha = getFecha();
 
-  // Guardar en historial local (últimos 10)
-  const nuevoLote = {lote, fecha, operario, medidores: loteActual, observaciones: observacionesActual, comentarios: comentariosActual, registrosFinales: registrosFinalesActual, firebaseId: null, eliminado: false, motivo: null};
+  const datosLote = loteActual;
+  const datosFotos = fotosActual;
+  const datosObservaciones = observacionesActual;
+  const datosComentarios = comentariosActual;
+  const datosRegistrosFinales = registrosFinalesActual;
+
+  showToast('☁️ Sincronizando con el panel del jefe...');
+  const firebaseId = await window.guardarLoteEnFirebase(lote, operario, fecha, datosLote, datosObservaciones, datosRegistrosFinales);
+  if (!firebaseId) {
+    showToast('⚠️ No se pudo sincronizar con el panel del jefe, pero el reporte se generará igual');
+  }
+
+  const nuevoLote = {lote, fecha, operario, medidores: datosLote, observaciones: datosObservaciones, comentarios: datosComentarios, registrosFinales: datosRegistrosFinales, firebaseId: firebaseId || null, eliminado: false, motivo: null};
   historial.push(nuevoLote);
   if (historial.length > MAX_HISTORIAL) historial = historial.slice(-MAX_HISTORIAL);
   localStorage.setItem('metrilab_historial', JSON.stringify(historial));
 
-  // Sincronizar con el panel del jefe (Firebase)
-  window.guardarLoteEnFirebase(lote, operario, fecha, loteActual, observacionesActual, registrosFinalesActual).then(id => {
-    if (id) {
-      nuevoLote.firebaseId = id;
-      localStorage.setItem('metrilab_historial', JSON.stringify(historial));
-    } else {
-      showToast('⚠️ No se pudo sincronizar con el panel del jefe');
-    }
-  });
-
   showToast('✨ Generando reporte...');
-  await generarZIP(loteActual, fotosActual, observacionesActual, comentariosActual, registrosFinalesActual, operario, fecha, lote);
+  await generarZIP(datosLote, datosFotos, datosObservaciones, datosComentarios, datosRegistrosFinales, operario, fecha, lote);
 
   loteActual = [];
   fotosActual = [];
@@ -1131,10 +1131,14 @@ async function finalizarLote() {
   tiemposProcesamiento = [];
   document.getElementById('resultado-actual').innerHTML = '';
   document.getElementById('warning-anomaly-container').innerHTML = '';
+  document.getElementById('lista-observaciones').innerHTML = '';
   document.getElementById('seccion-observaciones').style.display = 'none';
   document.getElementById('confirmar-check').checked = false;
+  document.getElementById('file-camara').value = '';
+  document.getElementById('file-galeria').value = '';
   actualizarProgreso();
   iniciarRegistro();
+  showToast('✅ Lote finalizado y datos limpiados');
 }
 
 // GENERAR EXCEL + ZIP
