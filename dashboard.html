@@ -387,13 +387,13 @@ window.descargarExcel = async function() {
   });
 
   const ws2 = wb.addWorksheet('Detalle medidores');
-  [18, 26, 16, 16, 16, 16, 16, 30].forEach((a, i) => { ws2.getColumn(i + 1).width = a; });
+  [18, 26, 16, 16, 10, 16, 16, 16, 30].forEach((a, i) => { ws2.getColumn(i + 1).width = a; });
 
-  ws2.mergeCells('A1:H1');
+  ws2.mergeCells('A1:I1');
   aplicar(ws2, 'A1', 'DETALLE DE MEDIDORES POR LOTE', { negrita: true, tam: 14, color_texto: BLANCO, color_fondo: AZUL, borde: bordeMedio });
   ws2.getRow(1).height = 26;
 
-  const headers2 = ['Lote', 'Operario', 'Fecha', 'Serie medidor', 'Registro inicial', 'Registro final', 'Precinto', 'Observación'];
+  const headers2 = ['Lote', 'Operario', 'Fecha', 'Serie medidor', 'Año', 'Registro inicial', 'Registro final', 'Precinto', 'Observación'];
   headers2.forEach((h, i) => { aplicar(ws2, ws2.getCell(3, i + 1).address, h, { negrita: true, tam: 10, color_texto: BLANCO, color_fondo: ROJO }); });
   ws2.getRow(3).height = 20;
 
@@ -402,8 +402,8 @@ window.descargarExcel = async function() {
     (l.medidores || []).forEach((m, idx) => {
       const colorFila = idx % 2 === 0 ? GRIS : BLANCO;
       const obsColor = (m.observacion && m.observacion !== 'NINGUNA') ? 'FDEDEC' : colorFila;
-      const valores = [l.lote || '', l.operario || '', l.fecha || '', m.serie_medidor || '', m.registro || '', m.registro_final || '', m.serie_precinto || '', m.observacion || 'NINGUNA'];
-      valores.forEach((v, j) => { aplicar(ws2, ws2.getCell(fila2, j + 1).address, v, { tam: 9, color_fondo: j === 7 ? obsColor : colorFila, alineacion: (j === 1 || j === 7) ? 'left' : 'center' }); });
+      const valores = [l.lote || '', l.operario || '', l.fecha || '', m.serie_medidor || '', m.anio || 'N/D', m.registro || '', m.registro_final || '', m.serie_precinto || '', m.observacion || 'NINGUNA'];
+      valores.forEach((v, j) => { aplicar(ws2, ws2.getCell(fila2, j + 1).address, v, { tam: 9, color_fondo: j === 8 ? obsColor : colorFila, alineacion: (j === 1 || j === 8) ? 'left' : 'center' }); });
       ws2.getRow(fila2).height = 16;
       fila2++;
     });
