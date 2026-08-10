@@ -1206,11 +1206,11 @@ async function generarZIP(datos, fotos, observaciones, comentarios, registrosFin
   ws.getRow(6).height = 28;
   ws.getRow(7).height = 6;
 
-  ws.mergeCells('A8:M8');
+  ws.mergeCells('A8:N8');
   aplicar('A8', 'RESUMEN DE MEDIDORES DEL LOTE', {negrita:true, tam:11, color_texto:BLANCO, color_fondo:AZUL});
   ws.getRow(8).height = 22;
 
-  const cols = ['#','Marca','Modelo','Nro. Serie Medidor','Vol. Cíclico','Tipo','Color','Nro. Serie Precinto','Registro Inicial (m³)','Registro Final (m³)','Diferencia (m³)','Foto','Observación'];
+  const cols = ['#','Marca','Modelo','Nro. Serie Medidor','Año','Vol. Cíclico','Tipo','Color','Nro. Serie Precinto','Registro Inicial (m³)','Registro Final (m³)','Diferencia (m³)','Foto','Observación'];
   cols.forEach((h, i) => {
     aplicar(ws.getCell(9, i+1).address, h, {negrita:true, tam:9, color_texto:BLANCO, color_fondo:ROJO});
   });
@@ -1229,19 +1229,19 @@ async function generarZIP(datos, fotos, observaciones, comentarios, registrosFin
     const diff = (!isNaN(regIni) && !isNaN(regFin) && registrosFinales[i]) ? (regFin - regIni).toFixed(3).replace('.', ',') : 'N/D';
 
     const valores = [
-      i+1, d.marca||'METREX', d.modelo||'G1.6', d.serie_medidor,
+      i+1, d.marca||'METREX', d.modelo||'G1.6', d.serie_medidor, d.anio_medidor || 'N/D',
       '0.7 dm³', 'Circular', 'Verde', d.serie_precinto || 'N/D',
       `${d.registro} m³`, `${registrosFinales[i]} m³`, `${diff} m³`, '', obs
     ];
     valores.forEach((v, j) => {
       const col = j + 1;
       let fondo = colorFila;
-      if (col === 13 && obs !== 'NINGUNA') fondo = 'FDEDEC';
-      if (col === 11) fondo = 'D5F5E3';
+      if (col === 14 && obs !== 'NINGUNA') fondo = 'FDEDEC';
+      if (col === 12) fondo = 'D5F5E3';
       aplicar(ws.getCell(fila, col).address, v, {tam:9, color_fondo:fondo});
-      if (col === 13) ws.getCell(fila, col).alignment = {horizontal:'center', vertical:'middle', wrapText:false};
+      if (col === 14) ws.getCell(fila, col).alignment = {horizontal:'center', vertical:'middle', wrapText:false};
     });
-    const cLink = ws.getCell(fila, 12);
+    const cLink = ws.getCell(fila, 13);
     cLink.value = {text: `📷 Ver foto ${i+1}`, hyperlink: `imagenes/${nombresImagenes[i]}`};
     cLink.font = {bold:true, size:9, color:{argb:'FF'+AZUL_LINK}, underline:true};
     cLink.alignment = {horizontal:'center', vertical:'middle'};
@@ -1254,7 +1254,7 @@ async function generarZIP(datos, fotos, observaciones, comentarios, registrosFin
   const filaComentariosInicio = 10 + total + 2;
   const tieneComentarios = comentarios.some(c => c && c.trim() !== '');
   if (tieneComentarios) {
-    ws.mergeCells(`A${filaComentariosInicio}:M${filaComentariosInicio}`);
+    ws.mergeCells(`A${filaComentariosInicio}:N${filaComentariosInicio}`);
     aplicar(`A${filaComentariosInicio}`, 'COMENTARIOS ADICIONALES', {negrita:true, tam:11, color_texto:BLANCO, color_fondo:VERDE});
     ws.getRow(filaComentariosInicio).height = 22;
 
@@ -1263,7 +1263,7 @@ async function generarZIP(datos, fotos, observaciones, comentarios, registrosFin
       if (c && c.trim() !== '') {
         ws.mergeCells(`A${f}:B${f}`);
         aplicar(`A${f}`, `#${i+1} (Serie ${datos[i].serie_medidor})`, {negrita:true, tam:9, color_fondo:AZUL_CLARO, alineacion:'left'});
-        ws.mergeCells(`C${f}:M${f}`);
+        ws.mergeCells(`C${f}:N${f}`);
         aplicar(`C${f}`, c, {tam:9, color_fondo:BLANCO, alineacion:'left'});
         ws.getRow(f).height = 18;
         f++;
@@ -1272,8 +1272,8 @@ async function generarZIP(datos, fotos, observaciones, comentarios, registrosFin
   }
 
   // PANEL DETALLES
-  ws.mergeCells('N8:S8');
-  aplicar('N8', 'DETALLES DEL LOTE', {negrita:true, tam:11, color_texto:BLANCO, color_fondo:AZUL});
+  ws.mergeCells('O8:T8');
+  aplicar('O8', 'DETALLES DEL LOTE', {negrita:true, tam:11, color_texto:BLANCO, color_fondo:AZUL});
 
   const detalles = [
     ['Lote:', lote], ['Fecha y hora:', fecha], ['Operario:', operario],
@@ -1283,23 +1283,23 @@ async function generarZIP(datos, fotos, observaciones, comentarios, registrosFin
   ];
   detalles.forEach(([k, v], i) => {
     const f = 9 + i;
-    ws.mergeCells(`N${f}:O${f}`);
-    aplicar(`N${f}`, k, {negrita:true, tam:8, color_fondo:AZUL_CLARO, alineacion:'left'});
-    ws.mergeCells(`P${f}:S${f}`);
-    aplicar(`P${f}`, v, {tam:8, color_fondo:BLANCO, alineacion:'left'});
+    ws.mergeCells(`O${f}:P${f}`);
+    aplicar(`O${f}`, k, {negrita:true, tam:8, color_fondo:AZUL_CLARO, alineacion:'left'});
+    ws.mergeCells(`Q${f}:T${f}`);
+    aplicar(`Q${f}`, v, {tam:8, color_fondo:BLANCO, alineacion:'left'});
     ws.getRow(f).height = 16;
   });
 
   const certFila = 9 + detalles.length + 1;
-  ws.mergeCells(`N${certFila}:S${certFila+2}`);
-  aplicar(`N${certFila}`, `Certifico que el proceso fue supervisado correctamente\n— ${operario} —\n${fecha}`, {negrita:true, italica:true, tam:8, color_fondo:VERDE_CLARO, borde:bordeMedio});
+  ws.mergeCells(`O${certFila}:T${certFila+2}`);
+  aplicar(`O${certFila}`, `Certifico que el proceso fue supervisado correctamente\n— ${operario} —\n${fecha}`, {negrita:true, italica:true, tam:8, color_fondo:VERDE_CLARO, borde:bordeMedio});
   ws.getRow(certFila).height = 18;
   ws.getRow(certFila+1).height = 18;
   ws.getRow(certFila+2).height = 18;
 
   const estFila = certFila + 4;
-  ws.mergeCells(`N${estFila}:S${estFila}`);
-  aplicar(`N${estFila}`, 'RESUMEN DE OBSERVACIONES', {negrita:true, tam:10, color_texto:BLANCO, color_fondo:VERDE});
+  ws.mergeCells(`O${estFila}:T${estFila}`);
+  aplicar(`O${estFila}`, 'RESUMEN DE OBSERVACIONES', {negrita:true, tam:10, color_texto:BLANCO, color_fondo:VERDE});
   ws.getRow(estFila).height = 20;
 
   const sinObs = observaciones.filter(o => o === 'NINGUNA').length;
@@ -1307,10 +1307,10 @@ async function generarZIP(datos, fotos, observaciones, comentarios, registrosFin
   const stats = [['Sin observación', sinObs, VERDE_CLARO], ['Con observación', conObs, AMARILLO]];
   stats.forEach(([n, v, c], i) => {
     const fr = estFila + 1 + i;
-    ws.mergeCells(`N${fr}:P${fr}`);
-    aplicar(`N${fr}`, n, {tam:9, color_fondo:c});
-    ws.mergeCells(`Q${fr}:S${fr}`);
-    aplicar(`Q${fr}`, `${v} (${total ? Math.round(v/total*100) : 0}%)`, {negrita:true, tam:9, color_fondo:c});
+    ws.mergeCells(`O${fr}:Q${fr}`);
+    aplicar(`O${fr}`, n, {tam:9, color_fondo:c});
+    ws.mergeCells(`R${fr}:T${fr}`);
+    aplicar(`R${fr}`, `${v} (${total ? Math.round(v/total*100) : 0}%)`, {negrita:true, tam:9, color_fondo:c});
     ws.getRow(fr).height = 16;
   });
 
