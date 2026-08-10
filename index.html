@@ -520,10 +520,21 @@
         </label>
       </div>
 
+      <button class="btn-secondary" id="btn-pendiente" onclick="guardarComoPendiente()" disabled>
+        ⏸️ Guardar como pendiente (completar después)
+      </button>
+
       <button class="btn-glow" id="btn-finalizar" onclick="finalizarLote()" disabled style="height:55px">
          Finalizar lote y descargar
       </button>
     </div>
+  </div>
+
+  <!-- PENDIENTES -->
+  <div class="screen" id="screen-pendientes">
+    <div class="section-title">⏳ Lotes pendientes</div>
+    <p style="font-size:11px;color:var(--text-secondary);margin-bottom:12px">Lotes con observaciones ya registradas, esperando su resultado final.</p>
+    <div id="pendientes-lista"></div>
   </div>
 
   <!-- HISTORIAL -->
@@ -588,6 +599,13 @@
       <div class="tab-icon"><svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm5 11h-4v4h-2v-4H7v-2h4V7h2v4h4v2z"/></svg></div>
       Registro
     </button>
+    <button class="tab" id="tab-pendientes" onclick="goTo('pendientes')">
+      <div class="tab-icon" style="position:relative">
+        <svg viewBox="0 0 24 24"><path d="M12 20a8 8 0 1 0 0-16 8 8 0 0 0 0 16zm.5-13H11v6l5.2 3.2.8-1.3-4.5-2.7V7z"/></svg>
+        <span id="badge-pendientes" style="display:none;position:absolute;top:-2px;right:-2px;background:#f59e0b;color:#0A0A0F;font-size:9px;font-weight:700;min-width:16px;height:16px;border-radius:8px;align-items:center;justify-content:center;padding:0 3px">0</span>
+      </div>
+      Pendientes
+    </button>
     <button class="tab" id="tab-historial" onclick="goTo('historial')">
       <div class="tab-icon"><svg viewBox="0 0 24 24"><path d="M13 3a9 9 0 0 0-9 9H1l3.89 3.89.07.14L9 12H6c0-3.87 3.13-7 7-7s7 3.13 7 7-3.13 7-7 7c-1.93 0-3.68-.79-4.94-2.06l-1.42 1.42A8.954 8.954 0 0 0 13 21a9 9 0 0 0 0-18zm-1 5v5l4.28 2.54.72-1.21-3.5-2.08V8H12z"/></svg></div>
       Historial
@@ -622,8 +640,11 @@ let tiemposProcesamiento = [];
 let procesando = false;
 let historial = JSON.parse(localStorage.getItem('metrilab_historial') || '[]');
 let contadorLoteDia = JSON.parse(localStorage.getItem('metrilab_contador') || '{}');
+let lotesPendientes = JSON.parse(localStorage.getItem('metrilab_pendientes') || '[]');
+let loteEnEdicion = null;
 
 const MAX_HISTORIAL = 10;
+const TIEMPO_ESPERA_MIN = 80;
 
 const PROMPT = `Eres un experto en análisis de medidores de gas industriales. Analiza esta imagen con extremo detalle.
 
@@ -703,6 +724,7 @@ function iniciarApp() {
   if (operario) document.getElementById('operario-select').value = operario;
   actualizarFecha();
   actualizarInicio();
+  actualizarBadgePendientes();
 }
 
 function cambiarClaves() {
@@ -763,11 +785,17 @@ function goTo(screen) {
   if (screen === 'historial') actualizarHistorial();
   if (screen === 'admin') actualizarAdmin();
   if (screen === 'registro') iniciarRegistro();
+  if (screen === 'pendientes') actualizarPendientes();
 }
 
 function iniciarRegistro() {
-  document.getElementById('lote-actual').textContent = 'Lote: ' + getLoteSinIncrementar();
-  document.getElementById('fecha-actual').textContent = getFecha().substring(0,10);
+  if (loteEnEdicion) {
+    document.getElementById('lote-actual').textContent = 'Lote: ' + loteEnEdicion.lote + ' (pendiente)';
+    document.getElementById('fecha-actual').textContent = loteEnEdicion.fecha.substring(0,10);
+  } else {
+    document.getElementById('lote-actual').textContent = 'Lote: ' + getLoteSinIncrementar();
+    document.getElementById('fecha-actual').textContent = getFecha().substring(0,10);
+  }
   const op = document.getElementById('operario-select').value;
   document.getElementById('confirmar-label').textContent = `Confirmo — ${op.split(' ')[0]} ${op.split(' ')[1]}`;
 }
@@ -1084,12 +1112,119 @@ function actualizarBotonFinalizar() {
   const camposLlenos = loteActual.every(d => validarCampos(d).length === 0);
   const confirmado = document.getElementById('confirmar-check')?.checked;
   document.getElementById('btn-finalizar').disabled = !(obsLlenas && regLlenos && camposLlenos && confirmado);
+  const btnPendiente = document.getElementById('btn-pendiente');
+  if (btnPendiente) btnPendiente.disabled = !(obsLlenas && camposLlenos) || !!loteEnEdicion;
 }
 
 function actualizarProgreso() {
   const n = loteActual.length;
   document.getElementById('progreso-txt').textContent = `${n} / 12`;
   document.getElementById('progress-fill').style.width = `${(n/12)*100}%`;
+}
+
+// LOTES PENDIENTES (esperando resultado final)
+function guardarComoPendiente() {
+  if (loteActual.length === 0) { showToast('No hay medidores'); return; }
+  if (!observacionesActual.every(o => o !== "")) { showToast('Faltan observaciones'); return; }
+  if (loteEnEdicion) { showToast('Este lote ya estaba pendiente'); return; }
+
+  const operario = document.getElementById('operario-select').value;
+  const lote = getLote();
+  const fecha = getFecha();
+
+  lotesPendientes.push({
+    lote, fecha, operario,
+    medidores: loteActual, fotos: fotosActual,
+    observaciones: observacionesActual, comentarios: comentariosActual,
+    horaInicio: Date.now()
+  });
+  localStorage.setItem('metrilab_pendientes', JSON.stringify(lotesPendientes));
+
+  loteActual = [];
+  fotosActual = [];
+  observacionesActual = [];
+  comentariosActual = [];
+  registrosFinalesActual = [];
+  tiemposProcesamiento = [];
+  document.getElementById('resultado-actual').innerHTML = '';
+  document.getElementById('warning-anomaly-container').innerHTML = '';
+  document.getElementById('lista-observaciones').innerHTML = '';
+  document.getElementById('seccion-observaciones').style.display = 'none';
+  document.getElementById('confirmar-check').checked = false;
+  document.getElementById('file-camara').value = '';
+  document.getElementById('file-galeria').value = '';
+  actualizarProgreso();
+  iniciarRegistro();
+  actualizarBadgePendientes();
+  showToast(`⏸️ Lote ${lote} guardado como pendiente. Complétalo cuando tengas los resultados finales.`);
+}
+
+function actualizarBadgePendientes() {
+  const listos = lotesPendientes.filter(p => (Date.now() - p.horaInicio) >= TIEMPO_ESPERA_MIN * 60000).length;
+  const badge = document.getElementById('badge-pendientes');
+  if (!badge) return;
+  if (listos > 0) {
+    badge.style.display = 'flex';
+    badge.textContent = listos;
+  } else {
+    badge.style.display = 'none';
+  }
+}
+
+function actualizarPendientes() {
+  const cont = document.getElementById('pendientes-lista');
+  if (lotesPendientes.length === 0) {
+    cont.innerHTML = `<div class="empty-state"><p>No hay lotes pendientes</p><span>Los lotes en espera de resultado final aparecerán aquí</span></div>`;
+    return;
+  }
+  cont.innerHTML = [...lotesPendientes].sort((a, b) => a.horaInicio - b.horaInicio).map((p) => {
+    const minutos = Math.floor((Date.now() - p.horaInicio) / 60000);
+    const listo = minutos >= TIEMPO_ESPERA_MIN;
+    return `
+    <div class="glass-card" style="${listo ? 'border-color:rgba(16,185,129,0.4)' : ''}">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+        <span style="font-size:14px;font-weight:600;color:var(--text-main)">${p.lote}</span>
+        <span class="badge" style="${listo ? 'background:rgba(16,185,129,0.15);color:#10b981;border-color:rgba(16,185,129,0.3)' : 'background:rgba(245,158,11,0.15);color:#f59e0b;border-color:rgba(245,158,11,0.3)'}">${listo ? '✅ Listo' : `⏳ ${minutos} min`}</span>
+      </div>
+      <div style="font-size:12px;color:var(--text-secondary);margin-bottom:10px">${p.fecha} · ${p.operario} · ${p.medidores.length} medidores</div>
+      <button class="btn-secondary" style="width:100%;margin-bottom:8px" onclick="completarPendiente('${p.lote}')">✏️ Completar resultado final</button>
+      <button class="btn-delete" style="width:100%;padding:8px" onclick="descartarPendiente('${p.lote}')">🗑️ Descartar</button>
+    </div>`;
+  }).join('');
+}
+
+function completarPendiente(loteCodigo) {
+  const idx = lotesPendientes.findIndex(p => p.lote === loteCodigo);
+  if (idx === -1) return;
+  const p = lotesPendientes[idx];
+
+  loteActual = p.medidores;
+  fotosActual = p.fotos;
+  observacionesActual = p.observaciones;
+  comentariosActual = p.comentarios;
+  registrosFinalesActual = p.medidores.map(() => "");
+  tiemposProcesamiento = [];
+  loteEnEdicion = { lote: p.lote, fecha: p.fecha };
+
+  lotesPendientes.splice(idx, 1);
+  localStorage.setItem('metrilab_pendientes', JSON.stringify(lotesPendientes));
+  actualizarBadgePendientes();
+
+  document.getElementById('operario-select').value = p.operario;
+  goTo('registro');
+  actualizarProgreso();
+  document.getElementById('seccion-observaciones').style.display = 'block';
+  renderObservaciones();
+  showToast(`Completa el registro final del lote ${p.lote}`);
+}
+
+function descartarPendiente(loteCodigo) {
+  if (!confirm(`¿Descartar el lote pendiente ${loteCodigo}? Esta acción no se puede deshacer.`)) return;
+  lotesPendientes = lotesPendientes.filter(p => p.lote !== loteCodigo);
+  localStorage.setItem('metrilab_pendientes', JSON.stringify(lotesPendientes));
+  actualizarBadgePendientes();
+  actualizarPendientes();
+  showToast('Lote pendiente descartado');
 }
 
 async function finalizarLote() {
@@ -1103,8 +1238,8 @@ async function finalizarLote() {
   }
 
   const operario = document.getElementById('operario-select').value;
-  const lote = getLote();
-  const fecha = getFecha();
+  const lote = loteEnEdicion ? loteEnEdicion.lote : getLote();
+  const fecha = loteEnEdicion ? loteEnEdicion.fecha : getFecha();
 
   const datosLote = loteActual;
   const datosFotos = fotosActual;
@@ -1137,6 +1272,7 @@ async function finalizarLote() {
   comentariosActual = [];
   registrosFinalesActual = [];
   tiemposProcesamiento = [];
+  loteEnEdicion = null;
   document.getElementById('resultado-actual').innerHTML = '';
   document.getElementById('warning-anomaly-container').innerHTML = '';
   document.getElementById('lista-observaciones').innerHTML = '';
@@ -1334,9 +1470,12 @@ function limpiarDatos() {
   if (confirm('¿Eliminar todos los datos?')) {
     historial = [];
     contadorLoteDia = {};
+    lotesPendientes = [];
     localStorage.removeItem('metrilab_historial');
     localStorage.removeItem('metrilab_contador');
+    localStorage.removeItem('metrilab_pendientes');
     actualizarAdmin();
+    actualizarBadgePendientes();
     showToast('Datos eliminados');
   }
 }
