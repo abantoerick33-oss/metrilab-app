@@ -10,7 +10,8 @@
 <script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-  import { getFirestore, collection, addDoc, doc, updateDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+  import { getFirestore, collection, addDoc, doc, updateDoc, getDoc, getDocs, query, where, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+  import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 
   const firebaseConfig = {
     apiKey: "AIzaSyCpRopyllFTQu3puQtRlLWAy83JXXgvXI0",
@@ -23,6 +24,108 @@
   };
   const appFirebase = initializeApp(firebaseConfig);
   const db = getFirestore(appFirebase);
+  const auth = getAuth(appFirebase);
+  window.operarioActual = null;
+
+  function entrarAlApp(nombre) {
+    window.operarioActual = nombre;
+    document.getElementById('login-screen').style.display = 'none';
+    const sel = document.getElementById('operario-select');
+    if (sel) {
+      sel.innerHTML = `<option value="${nombre}">${nombre}</option>`;
+      sel.disabled = true;
+    }
+    window.iniciarApp();
+  }
+
+  window.intentarLogin = async function() {
+    const usuarioInput = document.getElementById('login-usuario').value.trim();
+    const claveInput = document.getElementById('login-clave').value;
+    const errBox = document.getElementById('login-error');
+    errBox.textContent = '';
+    if (!usuarioInput || !claveInput) { errBox.textContent = 'Completa usuario y clave.'; return; }
+
+    const btn = document.getElementById('login-btn');
+    btn.disabled = true; btn.textContent = 'Ingresando...';
+
+    try {
+      const q = query(collection(db, "usuarios"), where("usuario", "==", usuarioInput));
+      const snap = await getDocs(q);
+      if (snap.empty) { errBox.textContent = 'Usuario no encontrado.'; return; }
+
+      const userSnap = snap.docs[0];
+      const uid = userSnap.id;
+      const userData = userSnap.data();
+
+      if (userData.bloqueadoHasta && userData.bloqueadoHasta.toDate && userData.bloqueadoHasta.toDate() > new Date()) {
+        const minRestantes = Math.ceil((userData.bloqueadoHasta.toDate() - new Date()) / 60000);
+        errBox.textContent = `Cuenta bloqueada. Intenta de nuevo en ${minRestantes} min.`;
+        return;
+      }
+
+      const emailInterno = `${usuarioInput.toLowerCase()}@metrilab.local`;
+      try {
+        await signInWithEmailAndPassword(auth, emailInterno, claveInput);
+      } catch (authErr) {
+        const nuevosIntentos = (userData.intentosFallidos || 0) + 1;
+        if (nuevosIntentos >= 3) {
+          const bloqueoHasta = new Date(Date.now() + 3 * 60000);
+          await updateDoc(doc(db, "usuarios", uid), { intentosFallidos: nuevosIntentos, bloqueadoHasta: bloqueoHasta });
+          await addDoc(collection(db, "alertas"), {
+            tipo: "bloqueo_cuenta",
+            usuario: userData.nombre,
+            fecha: serverTimestamp(),
+            mensaje: `La cuenta de ${userData.nombre} fue bloqueada 3 minutos tras 3 intentos fallidos.`,
+            vista: false
+          });
+          errBox.textContent = 'Clave incorrecta 3 veces. Cuenta bloqueada por 3 minutos.';
+        } else {
+          await updateDoc(doc(db, "usuarios", uid), { intentosFallidos: nuevosIntentos });
+          errBox.textContent = `Clave incorrecta. Intento ${nuevosIntentos} de 3.`;
+        }
+        return;
+      }
+
+      await updateDoc(doc(db, "usuarios", uid), { intentosFallidos: 0, bloqueadoHasta: null, ultimoAcceso: serverTimestamp() });
+
+      if (userData.rol !== 'operario') {
+        await signOut(auth);
+        errBox.textContent = 'Esta cuenta no tiene acceso a la app de registro.';
+        return;
+      }
+
+      entrarAlApp(userData.nombre);
+    } catch (e) {
+      console.error(e);
+      errBox.textContent = 'Error de conexión. Intenta de nuevo.';
+    } finally {
+      btn.disabled = false; btn.textContent = 'Ingresar';
+    }
+  };
+
+  window.cerrarSesion = async function() {
+    if (!confirm('¿Cerrar sesión?')) return;
+    await signOut(auth);
+    window.operarioActual = null;
+    document.getElementById('app').style.display = 'none';
+    document.getElementById('setup-screen').style.display = 'none';
+    document.getElementById('login-usuario').value = '';
+    document.getElementById('login-clave').value = '';
+    document.getElementById('login-screen').style.display = 'flex';
+  };
+
+  onAuthStateChanged(auth, async (user) => {
+    if (user) {
+      try {
+        const snap = await getDoc(doc(db, "usuarios", user.uid));
+        if (snap.exists() && snap.data().rol === 'operario') {
+          entrarAlApp(snap.data().nombre);
+          return;
+        }
+      } catch (e) { console.error(e); }
+    }
+    document.getElementById('login-screen').style.display = 'flex';
+  });
 
   window.guardarLoteEnFirebase = async function(lote, operario, fecha, medidores, observaciones, registrosFinales) {
     try {
@@ -399,6 +502,22 @@
 </head>
 <body class="dark">
 
+<div class="setup-screen" id="login-screen" style="display:none">
+  <div class="setup-logo">
+    <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 14H9V8h2v8zm4 0h-2V8h2v8z"/></svg>
+  </div>
+  <div class="setup-title">MetriLab</div>
+  <div class="setup-sub">Inicia sesión para continuar</div>
+  <div class="setup-card">
+    <div class="setup-label">Usuario</div>
+    <input class="input-box" type="text" id="login-usuario" placeholder="Tu DNI" autocapitalize="none" onkeydown="if(event.key==='Enter')document.getElementById('login-clave').focus()">
+    <div class="setup-label" style="margin-top:8px">Contraseña</div>
+    <input class="input-box" type="password" id="login-clave" placeholder="Tu clave" onkeydown="if(event.key==='Enter')intentarLogin()">
+    <div id="login-error" style="color:#fca5a5;font-size:12px;margin-top:6px;min-height:16px"></div>
+    <button class="btn-glow" id="login-btn" onclick="intentarLogin()" style="margin-top:8px;animation:none;height:50px;font-size:14px">Ingresar</button>
+  </div>
+</div>
+
 <div class="setup-screen" id="setup-screen">
   <div class="setup-logo">
     <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 14H9V8h2v8zm4 0h-2V8h2v8z"/></svg>
@@ -409,11 +528,6 @@
     <div class="setup-label">Clave API de Gemini</div>
     <div class="setup-hint">Tu clave de Google AI Studio. Se guarda solo en este dispositivo.</div>
     <input class="input-box" type="password" id="setup-key" placeholder="AQ.Ab8RN6...">
-    <div class="setup-label" style="margin-top:8px">Tu nombre</div>
-    <select class="select-box" id="setup-operario">
-      <option value="Joseph Erik Abanto Guerra">Joseph Erik Abanto Guerra</option>
-      <option value="Marco David Rodríguez Valencia">Marco David Rodríguez Valencia</option>
-    </select>
     <button class="btn-glow" onclick="guardarConfiguracion()" style="margin-top:8px;animation:none;height:50px;font-size:14px">Comenzar</button>
   </div>
 </div>
@@ -424,6 +538,7 @@
     <div class="topbar-icons">
       <button class="theme-toggle" id="theme-toggle" onclick="toggleTheme()">🌙</button>
       <svg viewBox="0 0 24 24" onclick="showToast('Sin notificaciones nuevas')"><path d="M12 22c1.1 0 2-.9 2-2h-4c0 1.1.9 2 2 2zm6-6v-5c0-3.07-1.63-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5v.68C7.64 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2z"/></svg>
+      <svg viewBox="0 0 24 24" onclick="cerrarSesion()" style="cursor:pointer"><path d="M17 7l-1.41 1.41L18.17 11H8v2h10.17l-2.58 2.59L17 17l5-5zM4 5h8V3H4c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h8v-2H4V5z"/></svg>
     </div>
   </div>
 
@@ -705,10 +820,8 @@ function cargarTema() {
 // CONFIGURACIÓN
 function guardarConfiguracion() {
   const key = document.getElementById('setup-key').value.trim();
-  const operario = document.getElementById('setup-operario').value;
   if (!key) { alert('Ingresa tu clave API'); return; }
   localStorage.setItem('metrilab_key', key);
-  localStorage.setItem('metrilab_operario', operario);
   document.getElementById('setup-screen').style.display = 'none';
   document.getElementById('app').style.display = 'block';
   iniciarApp();
@@ -720,8 +833,6 @@ function iniciarApp() {
   document.getElementById('setup-screen').style.display = 'none';
   document.getElementById('app').style.display = 'block';
   cargarTema();
-  const operario = localStorage.getItem('metrilab_operario') || '';
-  if (operario) document.getElementById('operario-select').value = operario;
   actualizarFecha();
   actualizarInicio();
   actualizarBadgePendientes();
@@ -812,7 +923,7 @@ function actualizarInicio() {
   document.getElementById('progreso-dia').textContent = pct + '%';
   document.getElementById('progreso-dia-fill').style.width = pct + '%';
 
-  const op = localStorage.getItem('metrilab_operario') || '';
+  const op = operarioActual || '';
   document.getElementById('greeting').textContent = `👋 Hola, ${op.split(' ')[0]}`;
   const contenedor = document.getElementById('lotes-recientes');
   if (historial.length === 0) {
@@ -1472,7 +1583,8 @@ function limpiarDatos() {
   }
 }
 
-iniciarApp();
+// iniciarApp() ya no se llama aquí directamente: la dispara el login
+// (ver onAuthStateChanged / entrarAlApp en el bloque de Firebase, al inicio del archivo)
 </script>
 </body>
 </html>
