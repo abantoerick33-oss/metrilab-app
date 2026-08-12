@@ -637,7 +637,7 @@ let observacionesActual = [];
 let comentariosActual = [];
 let registrosFinalesActual = [];
 let tiemposProcesamiento = [];
-let procesando = false;
+let siguienteSlot = 0;
 let historial = JSON.parse(localStorage.getItem('metrilab_historial') || '[]');
 let contadorLoteDia = JSON.parse(localStorage.getItem('metrilab_contador') || '{}');
 let lotesPendientes = JSON.parse(localStorage.getItem('metrilab_pendientes') || '[]');
@@ -908,44 +908,47 @@ function validarCampos(datos) {
 
 // DETECCIÓN DE ANOMALÍAS
 function detectarAnomalia() {
-  if (tiemposProcesamiento.length < 3) return null;
-  const ultimos = tiemposProcesamiento.slice(-3);
-  const promedio = ultimos.reduce((a,b) => a+b, 0) / ultimos.length;
-  // Si el promedio es menor a 5 segundos entre medidores, es sospechoso
-  if (promedio < 5000) {
-    return `⚠️ Velocidad de registro inusualmente rápida detectada (${(promedio/1000).toFixed(1)}s promedio). Verifica que los datos sean correctos.`;
-  }
+  // Ya no se usa el tiempo de respuesta como señal de alerta:
+  // con procesamiento en paralelo, ser rápido ya no significa que se hizo mal.
   return null;
 }
 
-// PROCESAR FOTO
+// PROCESAR FOTO (en paralelo, respetando el orden de captura)
 async function procesarFoto(input) {
-  if (!input.files[0] || procesando) return;
-  if (loteActual.length >= 12) { showToast('Lote completo'); return; }
-  procesando = true;
-  const tiempoInicio = Date.now();
+  if (!input.files[0]) return;
+  if (siguienteSlot >= 12) { showToast('Lote completo'); input.value = ''; return; }
   const file = input.files[0];
+  input.value = ''; // libera la cámara de inmediato para la siguiente foto
+
+  const slot = siguienteSlot;
+  siguienteSlot++;
+
+  loteActual[slot] = { procesando: true };
+  fotosActual[slot] = null;
+  observacionesActual[slot] = "";
+  comentariosActual[slot] = "";
+  registrosFinalesActual[slot] = "";
+  tiemposProcesamiento[slot] = 0;
+  actualizarProgreso();
+  renderObservaciones();
+
+  const tiempoInicio = Date.now();
   const reader = new FileReader();
   reader.onload = async (e) => {
-    document.getElementById('resultado-actual').innerHTML = `
-      <div class="glass-card">
-        <div class="loading">
-          <div class="spinner"></div>
-          <p style="font-size:13px;color:var(--text-secondary)">Optimizando imagen y analizando...</p>
-        </div>
-      </div>`;
-
     // Redimensionar
     const imgOptimizada = await redimensionarImagen(e.target.result, 1024);
     const base64 = imgOptimizada.split(',')[1];
     const mime = 'image/jpeg';
 
-    // Las 3 claves rotan automáticamente si una falla
-    const CLAVES = [
+    // Las 3 claves rotan: cada foto usa una clave distinta para procesar en
+    // paralelo, y si esa falla, prueba con las otras dos antes de rendirse
+    const TODAS_CLAVES = [
       localStorage.getItem('metrilab_key'),
       localStorage.getItem('metrilab_key_2'),
       localStorage.getItem('metrilab_key_3')
     ].filter(k => k);
+    const inicio = slot % TODAS_CLAVES.length;
+    const CLAVES = [...TODAS_CLAVES.slice(inicio), ...TODAS_CLAVES.slice(0, inicio)];
 
     let datos = null;
     for (const key of CLAVES) {
@@ -977,31 +980,9 @@ async function procesarFoto(input) {
         datos.registro = datos.registro.replace(/^0+/, '') || '0';
       }
 
-      const faltantes = validarCampos(datos);
-      loteActual.push(datos);
-      fotosActual.push(imgOptimizada);
-      observacionesActual.push("");
-      comentariosActual.push("");
-      registrosFinalesActual.push("");
-
-      const tiempoTotal = Date.now() - tiempoInicio;
-      tiemposProcesamiento.push(tiempoTotal);
-
-      actualizarProgreso();
-
-      const claseWarning = faltantes.length > 0 ? 'resultado-warning' : '';
-      const tituloTexto = faltantes.length > 0 ? `⚠️ Medidor ${loteActual.length} — faltan datos` : `✨ Medidor ${loteActual.length} registrado`;
-
-      document.getElementById('resultado-actual').innerHTML = `
-        <div class="resultado ${claseWarning}">
-          <div class="resultado-title">${tituloTexto}</div>
-          <div class="resultado-row"><span class="resultado-key">Marca</span><span class="resultado-val">${datos.marca}</span></div>
-          <div class="resultado-row"><span class="resultado-key">Modelo</span><span class="resultado-val">${datos.modelo}</span></div>
-          <div class="resultado-row"><span class="resultado-key">Serie</span><span class="resultado-val">${datos.serie_medidor || 'FALTA'}</span></div>
-          <div class="resultado-row"><span class="resultado-key">Año</span><span class="resultado-val">${datos.anio_medidor || 'N/D'}</span></div>
-          <div class="resultado-row"><span class="resultado-key">Registro</span><span class="resultado-val">${datos.registro || 'FALTA'} ${datos.unidad}</span></div>
-          <div class="resultado-row"><span class="resultado-key">Precinto</span><span class="resultado-val">${datos.serie_precinto||'N/D'}</span></div>
-        </div>`;
+      loteActual[slot] = datos;
+      fotosActual[slot] = imgOptimizada;
+      tiemposProcesamiento[slot] = Date.now() - tiempoInicio;
 
       // Alerta de anomalía
       const anomalia = detectarAnomalia();
@@ -1009,12 +990,12 @@ async function procesarFoto(input) {
       contWarn.innerHTML = anomalia ? `<div class="warning-anomaly">${anomalia}</div>` : '';
 
       document.getElementById('seccion-observaciones').style.display = 'block';
-      renderObservaciones();
     } else {
-      document.getElementById('resultado-actual').innerHTML = `<div class="glass-card" style="border-color:rgba(220,38,38,0.4)"><p style="color:#fca5a5;font-size:13px;text-align:center">No se pudo leer el medidor. Intenta de nuevo.</p></div>`;
+      loteActual[slot] = { error: true };
+      fotosActual[slot] = imgOptimizada;
     }
-    procesando = false;
-    input.value = '';
+    actualizarProgreso();
+    renderObservaciones();
   };
   reader.readAsDataURL(file);
 }
@@ -1023,6 +1004,12 @@ async function procesarFoto(input) {
 function renderObservaciones() {
   const cont = document.getElementById('lista-observaciones');
   cont.innerHTML = loteActual.map((d, i) => {
+    if (!d || d.procesando) {
+      return `<div class="medidor-item"><div class="medidor-num">#${i+1}</div><div class="medidor-data">⏳ Analizando foto...</div></div>`;
+    }
+    if (d.error) {
+      return `<div class="medidor-item"><div style="display:flex;justify-content:space-between;align-items:center"><div class="medidor-num">#${i+1}</div><button class="btn-delete" onclick="eliminarMedidor(${i})">🗑️ Eliminar</button></div><div class="medidor-data" style="color:#fca5a5">⚠️ No se pudo leer. Elimina y vuelve a tomar la foto.</div></div>`;
+    }
     const faltantes = validarCampos(d);
     const regInicial = parseFloat((d.registro || '0').replace(',', '.'));
     const regFinal = parseFloat((registrosFinalesActual[i] || '0').replace(',', '.'));
@@ -1088,6 +1075,7 @@ function cambiarComentario(idx, valor) {
 }
 
 function eliminarMedidor(idx) {
+  if (loteActual.some(d => !d || d.procesando)) { showToast('Espera a que terminen de procesarse las fotos antes de eliminar'); return; }
   if (!confirm(`¿Eliminar el medidor #${idx+1}?`)) return;
   loteActual.splice(idx, 1);
   fotosActual.splice(idx, 1);
@@ -1095,6 +1083,7 @@ function eliminarMedidor(idx) {
   comentariosActual.splice(idx, 1);
   registrosFinalesActual.splice(idx, 1);
   tiemposProcesamiento.splice(idx, 1);
+  siguienteSlot--;
   actualizarProgreso();
   if (loteActual.length === 0) {
     document.getElementById('resultado-actual').innerHTML = '';
@@ -1146,6 +1135,7 @@ function guardarComoPendiente() {
   comentariosActual = [];
   registrosFinalesActual = [];
   tiemposProcesamiento = [];
+  siguienteSlot = 0;
   document.getElementById('resultado-actual').innerHTML = '';
   document.getElementById('warning-anomaly-container').innerHTML = '';
   document.getElementById('lista-observaciones').innerHTML = '';
@@ -1204,6 +1194,7 @@ function completarPendiente(loteCodigo) {
   comentariosActual = p.comentarios;
   registrosFinalesActual = p.medidores.map(() => "");
   tiemposProcesamiento = [];
+  siguienteSlot = p.medidores.length;
   loteEnEdicion = { lote: p.lote, fecha: p.fecha };
 
   lotesPendientes.splice(idx, 1);
@@ -1272,6 +1263,7 @@ async function finalizarLote() {
   comentariosActual = [];
   registrosFinalesActual = [];
   tiemposProcesamiento = [];
+  siguienteSlot = 0;
   loteEnEdicion = null;
   document.getElementById('resultado-actual').innerHTML = '';
   document.getElementById('warning-anomaly-container').innerHTML = '';
