@@ -139,7 +139,7 @@
         serie_precinto: m.serie_precinto || 'N/D',
         observacion: observaciones[i] || 'NINGUNA'
       }));
-      const docRef = await addDoc(collection(db, "lotes"), {
+            const docRef = await addDoc(collection(db, "lotes"), {
         lote, operario, fecha,
         cantidadMedidores: medidores.length,
         medidores: medidoresFirestore,
@@ -152,6 +152,57 @@
     } catch (e) {
       console.error("Error guardando lote en Firebase:", e);
       return null;
+    }
+  };
+
+  window.crearLoteEnFirebase = async function(lote, operario, fecha) {
+    try {
+      const docRef = await addDoc(collection(db, "lotes"), {
+        lote, operario, fecha,
+        cantidadMedidores: 0,
+        medidores: {},
+        origen: "app",
+        eliminado: false,
+        motivoEliminacion: "",
+        creado: serverTimestamp()
+      });
+      return docRef.id;
+    } catch (e) {
+      console.error("Error creando lote en Firebase:", e);
+      return null;
+    }
+  };
+
+  window.actualizarMedidorEnFirebase = async function(loteId, slot, datosMedidor) {
+    if (!loteId) return false;
+    try {
+      const campo = `medidores.${slot}`;
+      await updateDoc(doc(db, "lotes", loteId), {
+        [campo]: datosMedidor,
+        cantidadMedidores: slot + 1
+      });
+      return true;
+    } catch (e) {
+      console.error("Error actualizando medidor en Firebase:", e);
+      return false;
+    }
+  };
+
+  window.finalizarLoteEnFirebase = async function(loteId, observaciones, registrosFinales, datos) {
+    if (!loteId) return false;
+    try {
+      const updates = {};
+      datos.forEach((d, i) => {
+        updates[`medidores.${i}.observacion`] = observaciones[i] || 'NINGUNA';
+        updates[`medidores.${i}.registro_final`] = String(registrosFinales[i] || d.registro || '0');
+        updates[`medidores.${i}.estado`] = 'terminado';
+        updates[`medidores.${i}.fecha_terminado`] = serverTimestamp();
+      });
+      await updateDoc(doc(db, "lotes", loteId), updates);
+      return true;
+    } catch (e) {
+      console.error("Error finalizando lote en Firebase:", e);
+      return false;
     }
   };
 
@@ -826,6 +877,8 @@ let historial = JSON.parse(localStorage.getItem('metrilab_historial') || '[]');
 let contadorLoteDia = JSON.parse(localStorage.getItem('metrilab_contador') || '{}');
 let lotesPendientes = JSON.parse(localStorage.getItem('metrilab_pendientes') || '[]');
 let loteEnEdicion = null;
+let loteFirebaseId = null;
+let loteCodigoAsignado = null;
 
 const MAX_HISTORIAL = 10;
 const TIEMPO_ESPERA_MIN = 80;
@@ -1087,6 +1140,26 @@ function detectarAnomalia() {
   return null;
 }
 
+// Crea el lote en Firebase si es la primera foto, o actualiza el medidor si ya existe
+async function sincronizarMedidorConFirebase(slot, datos) {
+  if (!loteFirebaseId) {
+    const operario = document.getElementById('operario-select').value;
+    loteCodigoAsignado = getLote();
+    const fecha = getFecha();
+    loteFirebaseId = await window.crearLoteEnFirebase(loteCodigoAsignado, operario, fecha);
+    if (!loteFirebaseId) { showToast('⚠️ No se pudo conectar con el panel del jefe'); return; }
+  }
+  await window.actualizarMedidorEnFirebase(loteFirebaseId, slot, {
+    serie_medidor: datos.serie_medidor || '',
+    anio: datos.anio_medidor || 'N/D',
+    registro: String(datos.registro || '0'),
+    unidad: 'm³',
+    serie_precinto: datos.serie_precinto || 'N/D',
+    estado: 'foto_tomada',
+    fecha_ultimo_cambio: new Date()
+  });
+}
+
 // PROCESAR FOTO (en paralelo, respetando el orden de captura)
 async function procesarFoto(input) {
   if (!input.files[0]) return;
@@ -1157,6 +1230,8 @@ async function procesarFoto(input) {
       loteActual[slot] = datos;
       fotosActual[slot] = imgOptimizada;
       tiemposProcesamiento[slot] = Date.now() - tiempoInicio;
+
+      sincronizarMedidorConFirebase(slot, datos);
 
       // Alerta de anomalía
       const anomalia = detectarAnomalia();
