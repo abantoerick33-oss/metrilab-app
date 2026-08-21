@@ -139,7 +139,7 @@
         serie_precinto: m.serie_precinto || 'N/D',
         observacion: observaciones[i] || 'NINGUNA'
       }));
-            const docRef = await addDoc(collection(db, "lotes"), {
+      const docRef = await addDoc(collection(db, "lotes"), {
         lote, operario, fecha,
         cantidadMedidores: medidores.length,
         medidores: medidoresFirestore,
@@ -152,6 +152,20 @@
     } catch (e) {
       console.error("Error guardando lote en Firebase:", e);
       return null;
+    }
+  };
+
+  window.eliminarLoteEnFirebase = async function(firebaseId, motivo) {
+    if (!firebaseId) return false;
+    try {
+      await updateDoc(doc(db, "lotes", firebaseId), {
+        eliminado: true,
+        motivoEliminacion: motivo
+      });
+      return true;
+    } catch (e) {
+      console.error("Error eliminando lote en Firebase:", e);
+      return false;
     }
   };
 
@@ -202,20 +216,6 @@
       return true;
     } catch (e) {
       console.error("Error finalizando lote en Firebase:", e);
-      return false;
-    }
-  };
-
-  window.eliminarLoteEnFirebase = async function(firebaseId, motivo) {
-    if (!firebaseId) return false;
-    try {
-      await updateDoc(doc(db, "lotes", firebaseId), {
-        eliminado: true,
-        motivoEliminacion: motivo
-      });
-      return true;
-    } catch (e) {
-      console.error("Error eliminando lote en Firebase:", e);
       return false;
     }
   };
@@ -1367,14 +1367,15 @@ function guardarComoPendiente() {
   if (loteEnEdicion) { showToast('Este lote ya estaba pendiente'); return; }
 
   const operario = document.getElementById('operario-select').value;
-  const lote = getLote();
+  const lote = loteCodigoAsignado || getLote();
   const fecha = getFecha();
 
   lotesPendientes.push({
     lote, fecha, operario,
     medidores: loteActual, fotos: fotosActual,
     observaciones: observacionesActual, comentarios: comentariosActual,
-    horaInicio: Date.now()
+    horaInicio: Date.now(),
+    firebaseId: loteFirebaseId
   });
   localStorage.setItem('metrilab_pendientes', JSON.stringify(lotesPendientes));
 
@@ -1385,6 +1386,8 @@ function guardarComoPendiente() {
   registrosFinalesActual = [];
   tiemposProcesamiento = [];
   siguienteSlot = 0;
+  loteFirebaseId = null;
+  loteCodigoAsignado = null;
   document.getElementById('resultado-actual').innerHTML = '';
   document.getElementById('warning-anomaly-container').innerHTML = '';
   document.getElementById('lista-observaciones').innerHTML = '';
@@ -1445,6 +1448,8 @@ function completarPendiente(loteCodigo) {
   tiemposProcesamiento = [];
   siguienteSlot = p.medidores.length;
   loteEnEdicion = { lote: p.lote, fecha: p.fecha };
+  loteFirebaseId = p.firebaseId || null;
+  loteCodigoAsignado = p.lote;
 
   lotesPendientes.splice(idx, 1);
   localStorage.setItem('metrilab_pendientes', JSON.stringify(lotesPendientes));
@@ -1478,7 +1483,7 @@ async function finalizarLote() {
   }
 
   const operario = document.getElementById('operario-select').value;
-  const lote = loteEnEdicion ? loteEnEdicion.lote : getLote();
+  const lote = loteEnEdicion ? loteEnEdicion.lote : (loteCodigoAsignado || getLote());
   const fecha = loteEnEdicion ? loteEnEdicion.fecha : getFecha();
 
   const datosLote = loteActual;
@@ -1488,9 +1493,13 @@ async function finalizarLote() {
   const datosRegistrosFinales = registrosFinalesActual;
 
   showToast('☁️ Sincronizando con el panel del jefe...');
-  let firebaseId = null;
+  let firebaseId = loteFirebaseId;
   try {
-    firebaseId = await window.guardarLoteEnFirebase(lote, operario, fecha, datosLote, datosObservaciones, datosRegistrosFinales);
+    if (firebaseId) {
+      await window.finalizarLoteEnFirebase(firebaseId, datosObservaciones, datosRegistrosFinales, datosLote);
+    } else {
+      firebaseId = await window.guardarLoteEnFirebase(lote, operario, fecha, datosLote, datosObservaciones, datosRegistrosFinales);
+    }
   } catch (e) {
     console.error('Error inesperado sincronizando con Firebase:', e);
   }
@@ -1514,6 +1523,8 @@ async function finalizarLote() {
   tiemposProcesamiento = [];
   siguienteSlot = 0;
   loteEnEdicion = null;
+  loteFirebaseId = null;
+  loteCodigoAsignado = null;
   document.getElementById('resultado-actual').innerHTML = '';
   document.getElementById('warning-anomaly-container').innerHTML = '';
   document.getElementById('lista-observaciones').innerHTML = '';
