@@ -1719,17 +1719,24 @@ async function generarZIP(datos, fotos, observaciones, comentarios, registrosFin
 }
 
 function limpiarDatos() {
-  if (confirm('¿Eliminar todos los datos?')) {
-    historial = [];
-    contadorLoteDia = {};
-    lotesPendientes = [];
-    localStorage.removeItem('metrilab_historial');
-    localStorage.removeItem('metrilab_contador');
-    localStorage.removeItem('metrilab_pendientes');
-    actualizarAdmin();
-    actualizarBadgePendientes();
-    showToast('Datos eliminados');
+  const pendientesActivos = lotesPendientes.length;
+  const advertencia = pendientesActivos > 0
+    ? `⚠️ Tienes ${pendientesActivos} lote(s) pendiente(s) sin completar. Se perderá la referencia a ellos.\n\n`
+    : '';
+  const confirmacion = prompt(`${advertencia}Esta acción borrará TODO el historial y los lotes pendientes de este teléfono. No se puede deshacer.\n\nEscribe ELIMINAR (en mayúsculas) para confirmar:`);
+  if (confirmacion !== 'ELIMINAR') {
+    if (confirmacion !== null) showToast('Cancelado: no escribiste ELIMINAR correctamente');
+    return;
   }
+  historial = [];
+  contadorLoteDia = {};
+  lotesPendientes = [];
+  localStorage.removeItem('metrilab_historial');
+  localStorage.removeItem('metrilab_contador');
+  localStorage.removeItem('metrilab_pendientes');
+  actualizarAdmin();
+  actualizarBadgePendientes();
+  showToast('Datos eliminados');
 }
 
 // iniciarApp() ya no se llama aquí directamente: la dispara el login
