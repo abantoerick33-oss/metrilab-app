@@ -10,7 +10,7 @@
 <script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-  import { getFirestore, collection, addDoc, doc, updateDoc, getDoc, getDocs, query, where, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+  import { getFirestore, collection, addDoc, doc, updateDoc, getDoc, getDocs, query, where, orderBy, limit, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
   import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 
   const firebaseConfig = {
@@ -155,7 +155,7 @@
     }
   };
 
-  window.eliminarLoteEnFirebase = async function(firebaseId, motivo) {
+    window.eliminarLoteEnFirebase = async function(firebaseId, motivo) {
     if (!firebaseId) return false;
     try {
       await updateDoc(doc(db, "lotes", firebaseId), {
@@ -169,6 +169,19 @@
     }
   };
 
+  window.obtenerResumenDesdeFirebase = async function(fechaISO) {
+    try {
+      const q = query(collection(db, "lotes"), orderBy("creado", "desc"), limit(20));
+      const snap = await getDocs(q);
+      const lotes = [];
+      snap.forEach(d => { const data = d.data(); if (!data.eliminado) lotes.push({ id: d.id, ...data }); });
+      const lotesHoy = lotes.filter(l => l.lote && l.lote.includes(`-VP-${fechaISO}`));
+      return { lotesHoy, recientes: lotes.slice(0, 5) };
+    } catch (e) {
+      console.error("Error obteniendo resumen desde Firebase:", e);
+      return null;
+    }
+  };
   window.crearLoteEnFirebase = async function(lote, operario, fecha) {
     try {
       const docRef = await addDoc(collection(db, "lotes"), {
@@ -1027,11 +1040,31 @@ function iniciarRegistro() {
   document.getElementById('confirmar-label').textContent = `Confirmo — ${op.split(' ')[0]} ${op.split(' ')[1]}`;
 }
 
-function actualizarInicio() {
+async function actualizarInicio() {
   const fechaISO = getFechaISO();
-  const lotesHoy = historial.filter(l => !l.eliminado && l.lote.includes(`-VP-${fechaISO}`));
+  const op = operarioActual || '';
+  document.getElementById('greeting').textContent = `👋 Hola, ${op.split(' ')[0]}`;
+
+  let lotesHoy = historial.filter(l => !l.eliminado && l.lote.includes(`-VP-${fechaISO}`));
+  let totalMed = lotesHoy.reduce((a,l) => a + l.medidores.length, 0);
+  let recientes = [...historial].filter(l => !l.eliminado).reverse().slice(0,5).map(l => ({
+    lote: l.lote, cantidadMedidores: l.medidores.length, operario: l.operario
+  }));
+  let fuenteFirebase = false;
+
+  if (typeof window.obtenerResumenDesdeFirebase === 'function') {
+    const resumen = await window.obtenerResumenDesdeFirebase(fechaISO);
+    if (resumen) {
+      lotesHoy = resumen.lotesHoy;
+      totalMed = lotesHoy.reduce((a,l) => a + (l.cantidadMedidores || 0), 0);
+      recientes = resumen.recientes.map(l => ({
+        lote: l.lote, cantidadMedidores: l.cantidadMedidores || 0, operario: l.operario || ''
+      }));
+      fuenteFirebase = true;
+    }
+  }
+
   document.getElementById('lotes-hoy').textContent = lotesHoy.length;
-  const totalMed = lotesHoy.reduce((a,l) => a + l.medidores.length, 0);
   document.getElementById('medidores-hoy').textContent = totalMed;
 
   const meta = 48;
@@ -1039,20 +1072,18 @@ function actualizarInicio() {
   document.getElementById('progreso-dia').textContent = pct + '%';
   document.getElementById('progreso-dia-fill').style.width = pct + '%';
 
-  const op = operarioActual || '';
-  document.getElementById('greeting').textContent = `👋 Hola, ${op.split(' ')[0]}`;
   const contenedor = document.getElementById('lotes-recientes');
-  if (historial.length === 0) {
+  if (recientes.length === 0) {
     contenedor.innerHTML = `<div class="empty-state"><p>No hay lotes aún</p><span>El laboratorio espera...</span></div>`;
     return;
   }
-  contenedor.innerHTML = [...historial].filter(l => !l.eliminado).reverse().slice(0,5).map(l => `
+  contenedor.innerHTML = recientes.map(l => `
     <div class="lote-row">
       <div>
         <div class="lote-title">${l.lote}</div>
-        <div class="lote-sub">${l.medidores.length} medidores · ${l.operario.split(' ')[0]}</div>
+        <div class="lote-sub">${l.cantidadMedidores} medidores · ${(l.operario||'').split(' ')[0]}</div>
       </div>
-      <span class="badge">OK</span>
+      <span class="badge">${fuenteFirebase ? '☁️' : 'OK'}</span>
     </div>`).join('');
 }
 
