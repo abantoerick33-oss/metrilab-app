@@ -1723,9 +1723,9 @@ function limpiarDatos() {
   const advertencia = pendientesActivos > 0
     ? `⚠️ Tienes ${pendientesActivos} lote(s) pendiente(s) sin completar. Se perderá la referencia a ellos.\n\n`
     : '';
-  const confirmacion = prompt(`${advertencia}Esta acción borrará TODO el historial y los lotes pendientes de este teléfono. No se puede deshacer.\n\nEscribe ELIMINAR (en mayúsculas) para confirmar:`);
-  if (confirmacion !== 'ELIMINAR') {
-    if (confirmacion !== null) showToast('Cancelado: no escribiste ELIMINAR correctamente');
+  const confirmacion = prompt(`${advertencia}Esta acción borrará TODO el historial y los lotes pendientes de este teléfono. No se puede deshacer.\n\nIngresa la clave de administrador para confirmar:`);
+  if (confirmacion !== 'TU_CLAVE') {
+    if (confirmacion !== null) showToast('Clave incorrecta. Acción cancelada.');
     return;
   }
   historial = [];
