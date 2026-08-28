@@ -201,7 +201,7 @@
     }
   };
 
-    window.reordenarMedidoresEnFirebase = async function(loteId, mapaCompleto) {
+  window.reordenarMedidoresEnFirebase = async function(loteId, mapaCompleto) {
     if (!loteId) return false;
     try {
       await updateDoc(doc(db, "lotes", loteId), {
@@ -1312,6 +1312,7 @@ async function procesarFoto(input) {
     } else {
       loteActual[slot] = { error: true };
       fotosActual[slot] = imgOptimizada;
+      document.getElementById('seccion-observaciones').style.display = 'block';
     }
     actualizarProgreso();
     renderObservaciones();
@@ -1344,7 +1345,7 @@ function renderObservaciones() {
       `).join('');
     }
 
-      return `
+    return `
     <div class="medidor-item">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;gap:8px">
         <div class="medidor-num">#${i+1}</div>
