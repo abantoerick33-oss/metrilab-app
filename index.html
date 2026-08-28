@@ -717,14 +717,15 @@
 
   <!-- REGISTRO -->
   <div class="screen" id="screen-registro">
-    <div class="glass-card">
+        <div class="glass-card">
       <div class="metric-label" style="margin-bottom:8px">Operario</div>
       <select class="select-box" id="operario-select">
         <option value="Joseph Erik Abanto Guerra">Joseph Erik Abanto Guerra</option>
         <option value="Marco David Rodríguez Valencia">Marco David Rodríguez Valencia</option>
       </select>
+      <div class="metric-label" style="margin-bottom:8px">Número de lote</div>
+      <input class="select-box" type="text" id="lote-manual-input" placeholder="Ej: L-2451" oninput="cambiarLoteManual(this.value)">
       <div style="display:flex;justify-content:space-between;align-items:center">
-        <span style="font-size:12px;color:var(--text-secondary)" id="lote-actual">Lote: --</span>
         <span style="font-size:12px;color:var(--text-secondary)" id="fecha-actual">--</span>
       </div>
     </div>
@@ -892,6 +893,7 @@ let lotesPendientes = JSON.parse(localStorage.getItem('metrilab_pendientes') || 
 let loteEnEdicion = null;
 let loteFirebaseId = null;
 let loteCodigoAsignado = null;
+let loteManualIngresado = '';
 
 const MAX_HISTORIAL = 10;
 const TIEMPO_ESPERA_MIN = 80;
@@ -1009,6 +1011,15 @@ function getLoteSinIncrementar() {
   return `QV${num}-VP-${fechaISO}`;
 }
 
+function construirCodigoLote(numeroManual) {
+  const fechaISO = getFechaISO();
+  return `${numeroManual}-VP-${fechaISO}`;
+}
+
+function cambiarLoteManual(valor) {
+  loteManualIngresado = valor.trim();
+}
+
 function showToast(msg) {
   const t = document.getElementById('toast');
   t.textContent = msg;
@@ -1029,11 +1040,14 @@ function goTo(screen) {
 }
 
 function iniciarRegistro() {
+  const inputLote = document.getElementById('lote-manual-input');
   if (loteEnEdicion) {
-    document.getElementById('lote-actual').textContent = 'Lote: ' + loteEnEdicion.lote + ' (pendiente)';
+    inputLote.value = loteEnEdicion.lote;
+    inputLote.disabled = true;
     document.getElementById('fecha-actual').textContent = loteEnEdicion.fecha.substring(0,10);
   } else {
-    document.getElementById('lote-actual').textContent = 'Lote: ' + getLoteSinIncrementar();
+    inputLote.disabled = false;
+    if (!loteFirebaseId) { inputLote.value = ''; loteManualIngresado = ''; }
     document.getElementById('fecha-actual').textContent = getFecha().substring(0,10);
   }
   const op = document.getElementById('operario-select').value;
@@ -1175,7 +1189,7 @@ function detectarAnomalia() {
 async function sincronizarMedidorConFirebase(slot, datos) {
   if (!loteFirebaseId) {
     const operario = document.getElementById('operario-select').value;
-    loteCodigoAsignado = getLote();
+    loteCodigoAsignado = loteEnEdicion ? loteEnEdicion.lote : construirCodigoLote(loteManualIngresado);
     const fecha = getFecha();
     loteFirebaseId = await window.crearLoteEnFirebase(loteCodigoAsignado, operario, fecha);
     if (!loteFirebaseId) { showToast('⚠️ No se pudo conectar con el panel del jefe'); return; }
@@ -1194,6 +1208,11 @@ async function sincronizarMedidorConFirebase(slot, datos) {
 // PROCESAR FOTO (en paralelo, respetando el orden de captura)
 async function procesarFoto(input) {
   if (!input.files[0]) return;
+  if (siguienteSlot === 0 && !loteEnEdicion && !loteManualIngresado) {
+    showToast('⚠️ Ingresa el número de lote antes de tomar la primera foto');
+    input.value = '';
+    return;
+  }
   if (siguienteSlot >= 12) { showToast('Lote completo'); input.value = ''; return; }
   const file = input.files[0];
   input.value = ''; // libera la cámara de inmediato para la siguiente foto
