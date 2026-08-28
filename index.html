@@ -1267,23 +1267,42 @@ async function procesarFoto(input) {
     const inicio = slot % TODAS_CLAVES.length;
     const CLAVES = [...TODAS_CLAVES.slice(inicio), ...TODAS_CLAVES.slice(0, inicio)];
 
-    let datos = null;
-    for (const key of CLAVES) {
-      try {
-        const resp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${key}`, {
-          method: 'POST',
-          headers: {'Content-Type': 'application/json'},
-          body: JSON.stringify({contents:[{parts:[{text:PROMPT},{inline_data:{mime_type:mime,data:base64}}]}]})
-        });
-        const data = await resp.json();
-        if (data.error) { continue; } // Si hay error, prueba la siguiente clave
-        const texto = data.candidates[0].content.parts[0].text.replace(/```json|```/g,'').trim();
-        datos = JSON.parse(texto);
-        break; // Si funciona, salir del bucle
-      } catch(err) {
-        console.error('Clave falló, probando siguiente:', err);
-        continue;
+        let datos = null;
+    let huboLimiteCuota = false;
+
+    async function intentarConClaves() {
+      for (const key of CLAVES) {
+        try {
+          const resp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${key}`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({contents:[{parts:[{text:PROMPT},{inline_data:{mime_type:mime,data:base64}}]}]})
+          });
+          if (resp.status === 429) {
+            console.error('Clave con cuota agotada (429), probando siguiente:', key.slice(0,15));
+            huboLimiteCuota = true;
+            continue;
+          }
+          const data = await resp.json();
+          if (data.error) { continue; } // Si hay error, prueba la siguiente clave
+          const texto = data.candidates[0].content.parts[0].text.replace(/```json|```/g,'').trim();
+          return JSON.parse(texto);
+        } catch(err) {
+          console.error('Clave falló, probando siguiente:', err);
+          continue;
+        }
       }
+      return null;
+    }
+
+    datos = await intentarConClaves();
+
+    // Si TODAS las claves dieron 429 (cuota agotada), espera 8 segundos y reintenta una vez más
+    if (!datos && huboLimiteCuota) {
+      showToast('⏳ Cuota de IA agotada, reintentando en unos segundos...');
+      await new Promise(r => setTimeout(r, 8000));
+      huboLimiteCuota = false;
+      datos = await intentarConClaves();
     }
 
     if (datos) {
