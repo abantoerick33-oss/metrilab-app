@@ -201,6 +201,19 @@
     }
   };
 
+    window.reordenarMedidoresEnFirebase = async function(loteId, mapaCompleto) {
+    if (!loteId) return false;
+    try {
+      await updateDoc(doc(db, "lotes", loteId), {
+        medidores: mapaCompleto
+      });
+      return true;
+    } catch (e) {
+      console.error("Error reordenando medidores en Firebase:", e);
+      return false;
+    }
+  };
+
   window.actualizarMedidorEnFirebase = async function(loteId, slot, datosMedidor) {
     if (!loteId) return false;
     try {
@@ -1331,11 +1344,15 @@ function renderObservaciones() {
       `).join('');
     }
 
-    return `
+      return `
     <div class="medidor-item">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;gap:8px">
         <div class="medidor-num">#${i+1}</div>
-        <button class="btn-delete" onclick="eliminarMedidor(${i})">🗑️ Eliminar</button>
+        <div style="display:flex;align-items:center;gap:6px;flex:1;justify-content:flex-end">
+          <span style="font-size:10px;color:var(--text-secondary)">Mover a:</span>
+          <input type="number" min="1" max="${loteActual.length}" value="${i+1}" style="width:44px;padding:6px;font-size:12px;background:var(--input-bg);border:1px solid var(--input-border);border-radius:6px;color:var(--text-main);text-align:center" onchange="moverMedidor(${i}, this.value)">
+          <button class="btn-delete" onclick="eliminarMedidor(${i})">🗑️</button>
+        </div>
       </div>
       <div class="medidor-data">Serie: ${d.serie_medidor || 'FALTA'} · Año: ${d.anio_medidor || 'N/D'} · Registro inicial: ${d.registro || 'FALTA'} ${d.unidad || ''}</div>
       ${camposFaltantes}
@@ -1378,6 +1395,46 @@ function cambiarRegistroFinal(idx, valor) {
 
 function cambiarComentario(idx, valor) {
   comentariosActual[idx] = valor;
+}
+
+function moverMedidor(idxActual, valorInput) {
+  const nuevaPos = parseInt(valorInput, 10) - 1;
+  const max = loteActual.length - 1;
+  if (isNaN(nuevaPos) || nuevaPos < 0 || nuevaPos > max || nuevaPos === idxActual) {
+    renderObservaciones();
+    return;
+  }
+  function moverEnArray(arr) {
+    const [item] = arr.splice(idxActual, 1);
+    arr.splice(nuevaPos, 0, item);
+  }
+  moverEnArray(loteActual);
+  moverEnArray(fotosActual);
+  moverEnArray(observacionesActual);
+  moverEnArray(comentariosActual);
+  moverEnArray(registrosFinalesActual);
+  moverEnArray(tiemposProcesamiento);
+  renderObservaciones();
+  resincronizarOrdenConFirebase();
+}
+
+async function resincronizarOrdenConFirebase() {
+  if (!loteFirebaseId) return;
+  const nuevoMapa = {};
+  loteActual.forEach((d, i) => {
+    if (!d || d.procesando || d.error) return;
+    nuevoMapa[i] = {
+      serie_medidor: d.serie_medidor || '',
+      anio: d.anio_medidor || 'N/D',
+      registro: String(d.registro || '0'),
+      unidad: 'm³',
+      serie_precinto: d.serie_precinto || 'N/D',
+      estado: 'foto_tomada',
+      fecha_ultimo_cambio: new Date()
+    };
+  });
+  const ok = await window.reordenarMedidoresEnFirebase(loteFirebaseId, nuevoMapa);
+  if (!ok) showToast('⚠️ El reordenamiento no se sincronizó con el panel del jefe');
 }
 
 function eliminarMedidor(idx) {
