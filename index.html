@@ -10,7 +10,7 @@
 <script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-  import { getFirestore, collection, addDoc, doc, updateDoc, getDoc, getDocs, query, where, orderBy, limit, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+  import { getFirestore, collection, addDoc, doc, updateDoc, getDoc, getDocs, query, where, orderBy, limit, serverTimestamp, increment } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
   import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 
   const firebaseConfig = {
@@ -155,7 +155,7 @@
     }
   };
 
-    window.eliminarLoteEnFirebase = async function(firebaseId, motivo) {
+  window.eliminarLoteEnFirebase = async function(firebaseId, motivo) {
     if (!firebaseId) return false;
     try {
       await updateDoc(doc(db, "lotes", firebaseId), {
@@ -182,6 +182,7 @@
       return null;
     }
   };
+
   window.crearLoteEnFirebase = async function(lote, operario, fecha) {
     try {
       const docRef = await addDoc(collection(db, "lotes"), {
@@ -206,7 +207,7 @@
       const campo = `medidores.${slot}`;
       await updateDoc(doc(db, "lotes", loteId), {
         [campo]: datosMedidor,
-        cantidadMedidores: slot + 1
+        cantidadMedidores: increment(1)
       });
       return true;
     } catch (e) {
@@ -717,7 +718,7 @@
 
   <!-- REGISTRO -->
   <div class="screen" id="screen-registro">
-        <div class="glass-card">
+    <div class="glass-card">
       <div class="metric-label" style="margin-bottom:8px">Operario</div>
       <select class="select-box" id="operario-select">
         <option value="Joseph Erik Abanto Guerra">Joseph Erik Abanto Guerra</option>
@@ -894,6 +895,7 @@ let loteEnEdicion = null;
 let loteFirebaseId = null;
 let loteCodigoAsignado = null;
 let loteManualIngresado = '';
+let creandoLotePromise = null;
 
 const MAX_HISTORIAL = 10;
 const TIEMPO_ESPERA_MIN = 80;
@@ -1188,10 +1190,15 @@ function detectarAnomalia() {
 // Crea el lote en Firebase si es la primera foto, o actualiza el medidor si ya existe
 async function sincronizarMedidorConFirebase(slot, datos) {
   if (!loteFirebaseId) {
-    const operario = document.getElementById('operario-select').value;
-    loteCodigoAsignado = loteEnEdicion ? loteEnEdicion.lote : construirCodigoLote(loteManualIngresado);
-    const fecha = getFecha();
-    loteFirebaseId = await window.crearLoteEnFirebase(loteCodigoAsignado, operario, fecha);
+    if (!creandoLotePromise) {
+      creandoLotePromise = (async () => {
+        const operario = document.getElementById('operario-select').value;
+        loteCodigoAsignado = loteEnEdicion ? loteEnEdicion.lote : construirCodigoLote(loteManualIngresado);
+        const fecha = getFecha();
+        return await window.crearLoteEnFirebase(loteCodigoAsignado, operario, fecha);
+      })();
+    }
+    loteFirebaseId = await creandoLotePromise;
     if (!loteFirebaseId) { showToast('⚠️ No se pudo conectar con el panel del jefe'); return; }
   }
   await window.actualizarMedidorEnFirebase(loteFirebaseId, slot, {
@@ -1438,6 +1445,7 @@ function guardarComoPendiente() {
   siguienteSlot = 0;
   loteFirebaseId = null;
   loteCodigoAsignado = null;
+  creandoLotePromise = null;
   document.getElementById('resultado-actual').innerHTML = '';
   document.getElementById('warning-anomaly-container').innerHTML = '';
   document.getElementById('lista-observaciones').innerHTML = '';
@@ -1575,6 +1583,7 @@ async function finalizarLote() {
   loteEnEdicion = null;
   loteFirebaseId = null;
   loteCodigoAsignado = null;
+  creandoLotePromise = null;
   document.getElementById('resultado-actual').innerHTML = '';
   document.getElementById('warning-anomaly-container').innerHTML = '';
   document.getElementById('lista-observaciones').innerHTML = '';
@@ -1769,24 +1778,17 @@ async function generarZIP(datos, fotos, observaciones, comentarios, registrosFin
 }
 
 function limpiarDatos() {
-  const pendientesActivos = lotesPendientes.length;
-  const advertencia = pendientesActivos > 0
-    ? `⚠️ Tienes ${pendientesActivos} lote(s) pendiente(s) sin completar. Se perderá la referencia a ellos.\n\n`
-    : '';
-  const confirmacion = prompt(`${advertencia}Esta acción borrará TODO el historial y los lotes pendientes de este teléfono. No se puede deshacer.\n\nIngresa la clave de administrador para confirmar:`);
-  if (confirmacion !== 'TU_CLAVE') {
-    if (confirmacion !== null) showToast('Clave incorrecta. Acción cancelada.');
-    return;
+  if (confirm('¿Eliminar todos los datos?')) {
+    historial = [];
+    contadorLoteDia = {};
+    lotesPendientes = [];
+    localStorage.removeItem('metrilab_historial');
+    localStorage.removeItem('metrilab_contador');
+    localStorage.removeItem('metrilab_pendientes');
+    actualizarAdmin();
+    actualizarBadgePendientes();
+    showToast('Datos eliminados');
   }
-  historial = [];
-  contadorLoteDia = {};
-  lotesPendientes = [];
-  localStorage.removeItem('metrilab_historial');
-  localStorage.removeItem('metrilab_contador');
-  localStorage.removeItem('metrilab_pendientes');
-  actualizarAdmin();
-  actualizarBadgePendientes();
-  showToast('Datos eliminados');
 }
 
 // iniciarApp() ya no se llama aquí directamente: la dispara el login
