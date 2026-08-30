@@ -10,7 +10,7 @@
 <script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-  import { getFirestore, collection, addDoc, doc, updateDoc, getDoc, getDocs, query, where, orderBy, limit, serverTimestamp, increment } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+  import { getFirestore, collection, addDoc, doc, updateDoc, getDoc, getDocs, query, where, orderBy, limit, serverTimestamp, increment, onSnapshot } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
   import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 
   const firebaseConfig = {
@@ -89,13 +89,15 @@
 
       await updateDoc(doc(db, "usuarios", uid), { intentosFallidos: 0, bloqueadoHasta: null, ultimoAcceso: serverTimestamp() });
 
-      if (userData.rol !== 'operario') {
+      if (userData.rol === 'operario') {
+        entrarAlApp(userData.nombre);
+      } else if (userData.rol === 'jefe') {
+        entrarAlPanelJefe(userData.nombre);
+      } else {
         await signOut(auth);
-        errBox.textContent = 'Esta cuenta no tiene acceso a la app de registro.';
+        errBox.textContent = 'Esta cuenta no tiene un rol válido.';
         return;
       }
-
-      entrarAlApp(userData.nombre);
     } catch (e) {
       console.error(e);
       errBox.textContent = 'Error de conexión. Intenta de nuevo.';
@@ -109,6 +111,7 @@
     await signOut(auth);
     window.operarioActual = null;
     document.getElementById('app').style.display = 'none';
+    document.getElementById('jefe-panel').style.display = 'none';
     document.getElementById('setup-screen').style.display = 'none';
     document.getElementById('login-usuario').value = '';
     document.getElementById('login-clave').value = '';
@@ -121,6 +124,10 @@
         const snap = await getDoc(doc(db, "usuarios", user.uid));
         if (snap.exists() && snap.data().rol === 'operario') {
           entrarAlApp(snap.data().nombre);
+          return;
+        }
+        if (snap.exists() && snap.data().rol === 'jefe') {
+          entrarAlPanelJefe(snap.data().nombre);
           return;
         }
       } catch (e) { console.error(e); }
@@ -246,6 +253,141 @@
       return false;
     }
   };
+
+  // ===== PANEL DEL JEFE =====
+  let jefeTodosLotes = [];
+  let jefeFiltroActual = 'todos';
+  let jefeFiltroEstado = 'activos';
+  let jefePanelIniciado = false;
+
+  window.entrarAlPanelJefe = function(nombre) {
+    window.operarioActual = nombre;
+    document.getElementById('login-screen').style.display = 'none';
+    document.getElementById('setup-screen').style.display = 'none';
+    document.getElementById('jefe-panel').style.display = 'block';
+    if (!jefePanelIniciado) {
+      jefePanelIniciado = true;
+      iniciarPanelJefe();
+    }
+  };
+
+  function iniciarPanelJefe() {
+    const q = query(collection(db, "lotes"), orderBy("creado", "desc"));
+    onSnapshot(q, (snapshot) => {
+      jefeTodosLotes = [];
+      snapshot.forEach((d) => {
+        jefeTodosLotes.push({ id: d.id, ...d.data() });
+      });
+      document.getElementById('jefe-status-text').textContent = 'Conectado · Actualizando en tiempo real';
+      actualizarPanelJefe();
+    }, (error) => {
+      console.error(error);
+      document.getElementById('jefe-status-text').textContent = 'Error de conexión';
+    });
+  }
+
+  window.jefeFiltrar = function(operario) {
+    jefeFiltroActual = operario;
+    document.querySelectorAll('#jefe-filter-bar .filter-btn').forEach(b => b.classList.remove('active'));
+    event.target.classList.add('active');
+    actualizarPanelJefe();
+  };
+
+  window.jefeFiltrarEstado = function(estado) {
+    jefeFiltroEstado = estado;
+    document.querySelectorAll('#jefe-filter-bar-estado .filter-btn').forEach(b => b.classList.remove('active'));
+    event.target.classList.add('active');
+    actualizarPanelJefe();
+  };
+
+  window.jefeToggleDetalles = function(id) {
+    const el = document.getElementById('jefe-detalles-' + id);
+    el.classList.toggle('show');
+  };
+
+  function actualizarPanelJefe() {
+    let lotesFiltrados = jefeTodosLotes;
+    if (jefeFiltroActual !== 'todos') {
+      lotesFiltrados = lotesFiltrados.filter(l =>
+        (l.operario || '').toLowerCase().includes(jefeFiltroActual.toLowerCase())
+      );
+    }
+    if (jefeFiltroEstado === 'activos') {
+      lotesFiltrados = lotesFiltrados.filter(l => !l.eliminado);
+    } else if (jefeFiltroEstado === 'eliminados') {
+      lotesFiltrados = lotesFiltrados.filter(l => l.eliminado);
+    }
+
+    const lotesActivos = jefeTodosLotes.filter(l => !l.eliminado);
+    document.getElementById('jefe-total-lotes').textContent = lotesActivos.length;
+    document.getElementById('jefe-total-medidores').textContent = lotesActivos.reduce((a, l) => a + (l.cantidadMedidores || (l.medidores?.length || 0)), 0);
+
+    const hoy = new Date().toLocaleDateString('es-PE', {timeZone: 'America/Lima'});
+    const lotesHoy = lotesActivos.filter(l => {
+      if (!l.fecha) return false;
+      return l.fecha.includes(hoy.replaceAll('/', '/')) || (l.creado && new Date(l.creado.seconds * 1000).toLocaleDateString('es-PE', {timeZone: 'America/Lima'}) === hoy);
+    });
+    document.getElementById('jefe-lotes-hoy').textContent = lotesHoy.length;
+
+    const totalEliminados = jefeTodosLotes.filter(l => l.eliminado).length;
+    document.getElementById('jefe-btn-filtro-eliminados').textContent = `❌ Eliminados (${totalEliminados})`;
+
+    const contenedor = document.getElementById('jefe-lista-lotes');
+    if (lotesFiltrados.length === 0) {
+      contenedor.innerHTML = `
+        <div class="empty-state">
+          <svg viewBox="0 0 24 24"><path d="M19 3H5c-1.11 0-2 .89-2 2v14c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.11-.9-2-2-2zm-3.5 11l-4.5-4.5-4.5 4.5-1-1 5.5-5.5 5.5 5.5-1 1z"/></svg>
+          <p>No hay lotes para mostrar</p>
+        </div>`;
+      return;
+    }
+
+    contenedor.innerHTML = lotesFiltrados.map(l => {
+      const origen = (l.origen || 'app') === 'web' ? 'web' : 'app';
+      const origenLabel = origen === 'web' ? '🌐 Web' : '📱 App móvil';
+      return `
+      <div class="lote-card ${l.eliminado ? 'eliminado' : ''}">
+        <div class="lote-header">
+          <div class="lote-title">${l.lote || 'Sin código'}<span class="origen-tag ${origen}">${origenLabel}</span></div>
+          <span class="lote-badge ${l.eliminado ? 'eliminado' : ''}">${l.eliminado ? '❌ Eliminado' : '✓ OK'}</span>
+        </div>
+        ${l.eliminado ? `<div class="lote-motivo">🗑️ Motivo de eliminación: ${l.motivoEliminacion || 'Sin especificar'}</div>` : ''}
+        <div class="lote-info">
+          <span>👤 <strong>${l.operario || 'Sin operario'}</strong></span>
+          <span>📅 <strong>${l.fecha || 'Sin fecha'}</strong></span>
+          <span>📦 <strong>${l.cantidadMedidores || (l.medidores?.length || 0)} medidores</strong></span>
+        </div>
+        <button class="toggle-btn" onclick="jefeToggleDetalles('${l.id}')">Ver detalles ▾</button>
+        <div class="lote-detalles" id="jefe-detalles-${l.id}">
+          ${renderMedidoresJefe(l.medidores || [])}
+        </div>
+      </div>
+    `;
+    }).join('');
+  }
+
+  function renderMedidoresJefe(medidoresInput) {
+    const medidores = Array.isArray(medidoresInput) ? medidoresInput : Object.values(medidoresInput || {});
+    if (!medidores.length) return '<p style="font-size:12px;color:rgba(255,255,255,0.4)">Sin medidores</p>';
+    return `
+      <div class="medidor-row" style="font-weight:600;color:rgba(255,255,255,0.6);text-transform:uppercase;font-size:9px;letter-spacing:1px">
+        <span>#</span>
+        <span>Serie medidor</span>
+        <span>Año</span>
+        <span>Registro</span>
+        <span class="med-precinto-col">Precinto</span>
+      </div>
+      ${medidores.map((m, i) => `
+        <div class="medidor-row">
+          <span class="med-num">${i+1}</span>
+          <span>${m.serie_medidor || '—'}</span>
+          <span>${m.anio || 'N/D'}</span>
+          <span>${m.registro || '—'} ${m.unidad || 'm³'}</span>
+          <span class="med-precinto-col">${m.serie_precinto || 'N/D'}</span>
+        </div>
+      `).join('')}
+    `;
+  }
 </script>
 <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -623,6 +765,54 @@
       color: #f59e0b; padding: 10px 12px; border-radius: 10px; margin-bottom: 12px;
       font-size: 12px; text-align: center;
     }
+  /* ===== PANEL DEL JEFE ===== */
+  #jefe-panel { max-width: 900px; margin: 0 auto; padding: 20px; color: white; }
+  #jefe-panel .topbar { padding: 20px 0; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid rgba(155, 89, 246, 0.2); margin-bottom: 24px; flex-wrap: wrap; gap: 12px; }
+  #jefe-panel .topbar-title { font-size: 28px; font-weight: bold; background: linear-gradient(135deg, #9B59F6, #00D4FF); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+  #jefe-panel .topbar-sub { color: rgba(255,255,255,0.5); font-size: 13px; margin-top: 4px; }
+  #jefe-panel .topbar-right { display: flex; align-items: center; gap: 16px; }
+  #jefe-panel .nav-link { background: rgba(155, 89, 246, 0.15); border: 1px solid rgba(155, 89, 246, 0.3); color: #9B59F6; padding: 8px 14px; border-radius: 10px; font-size: 12px; font-weight: 600; text-decoration: none; white-space: nowrap; cursor: pointer; }
+  #jefe-panel .status-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: #10b981; box-shadow: 0 0 10px #10b981; animation: jefePulse 2s ease-in-out infinite; }
+  @keyframes jefePulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+  #jefe-panel .status-text { font-size: 12px; color: rgba(255,255,255,0.7); margin-left: 6px; }
+  #jefe-panel .metrics-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; margin-bottom: 24px; }
+  #jefe-panel .metric-card { background: linear-gradient(135deg, rgba(26, 26, 46, 0.7), rgba(42, 26, 62, 0.3)); backdrop-filter: blur(10px); border: 1px solid rgba(155, 89, 246, 0.2); border-radius: 16px; padding: 20px; text-align: center; }
+  #jefe-panel .metric-card.cyan { border-color: rgba(0, 212, 255, 0.3); }
+  #jefe-panel .metric-card.green { border-color: rgba(46, 204, 113, 0.3); }
+  #jefe-panel .metric-val { font-size: 32px; font-weight: bold; color: white; margin-bottom: 4px; }
+  #jefe-panel .metric-label { font-size: 12px; color: rgba(255,255,255,0.6); text-transform: uppercase; letter-spacing: 1px; }
+  #jefe-panel .section-title { font-size: 18px; font-weight: bold; color: white; margin-bottom: 16px; display: flex; align-items: center; gap: 10px; }
+  #jefe-panel .filter-bar { display: flex; gap: 10px; margin-bottom: 20px; flex-wrap: wrap; }
+  #jefe-panel .filter-btn { background: rgba(26, 26, 46, 0.6); border: 1px solid rgba(58, 46, 93, 0.5); color: rgba(255,255,255,0.7); padding: 8px 16px; border-radius: 10px; cursor: pointer; font-size: 12px; font-weight: 500; transition: all 0.3s; }
+  #jefe-panel .filter-btn.active { background: linear-gradient(135deg, #9B59F6, #00D4FF); color: white; border-color: transparent; }
+  #jefe-panel .lote-card { background: linear-gradient(135deg, rgba(26, 26, 46, 0.7), rgba(42, 26, 62, 0.3)); backdrop-filter: blur(10px); border: 1px solid rgba(58, 46, 93, 0.3); border-radius: 16px; padding: 18px; margin-bottom: 14px; transition: all 0.3s; }
+  #jefe-panel .lote-card:hover { border-color: rgba(155, 89, 246, 0.4); }
+  #jefe-panel .lote-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+  #jefe-panel .lote-title { font-size: 16px; font-weight: 600; color: white; }
+  #jefe-panel .lote-badge { background: rgba(46, 204, 113, 0.2); color: #2ECC40; border: 1px solid rgba(46, 204, 113, 0.4); padding: 3px 10px; border-radius: 8px; font-size: 11px; font-weight: 600; }
+  #jefe-panel .lote-badge.eliminado { background: rgba(231, 76, 60, 0.2); color: #E74C3C; border-color: rgba(231, 76, 60, 0.4); }
+  #jefe-panel .lote-card.eliminado { opacity: 0.6; }
+  #jefe-panel .lote-motivo { font-size: 11px; color: #E74C3C; background: rgba(231, 76, 60, 0.1); border: 1px solid rgba(231, 76, 60, 0.25); border-radius: 8px; padding: 6px 10px; margin-bottom: 10px; }
+  #jefe-panel .origen-tag { font-size: 10px; padding: 2px 8px; border-radius: 6px; font-weight: 600; margin-left: 8px; }
+  #jefe-panel .origen-tag.web { background: rgba(0, 212, 255, 0.15); color: #00D4FF; border: 1px solid rgba(0, 212, 255, 0.3); }
+  #jefe-panel .origen-tag.app { background: rgba(155, 89, 246, 0.15); color: #9B59F6; border: 1px solid rgba(155, 89, 246, 0.3); }
+  #jefe-panel .lote-info { display: flex; gap: 20px; flex-wrap: wrap; font-size: 12px; color: rgba(255,255,255,0.6); margin-bottom: 12px; }
+  #jefe-panel .lote-info span strong { color: white; }
+  #jefe-panel .lote-detalles { display: none; background: rgba(10, 10, 15, 0.5); border-radius: 10px; padding: 12px; margin-top: 10px; }
+  #jefe-panel .lote-detalles.show { display: block; }
+  #jefe-panel .medidor-row { display: grid; grid-template-columns: 30px 1fr 0.6fr 1fr 1fr; gap: 10px; padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,0.05); font-size: 11px; align-items: center; }
+  #jefe-panel .medidor-row:last-child { border: none; }
+  #jefe-panel .med-num { background: linear-gradient(135deg, #9B59F6, #00D4FF); color: white; padding: 2px 6px; border-radius: 6px; font-size: 10px; font-weight: 600; text-align: center; }
+  #jefe-panel .toggle-btn { background: rgba(155, 89, 246, 0.15); border: 1px solid rgba(155, 89, 246, 0.3); color: #9B59F6; padding: 6px 12px; border-radius: 8px; cursor: pointer; font-size: 11px; font-weight: 500; }
+  #jefe-panel .empty-state { text-align: center; padding: 60px 20px; color: rgba(255,255,255,0.4); }
+  #jefe-panel .empty-state svg { width: 60px; height: 60px; fill: rgba(155, 89, 246, 0.3); margin-bottom: 12px; }
+  #jefe-panel .loading { text-align: center; padding: 40px; }
+  #jefe-panel .spinner { width: 40px; height: 40px; border: 3px solid rgba(155, 89, 246, 0.2); border-top-color: #9B59F6; border-radius: 50%; animation: jefeSpin 0.8s linear infinite; margin: 0 auto 10px; }
+  @keyframes jefeSpin { to { transform: rotate(360deg); } }
+  @media (max-width: 600px) {
+    #jefe-panel .medidor-row { grid-template-columns: 25px 1fr 0.6fr 1fr; font-size: 10px; }
+    #jefe-panel .med-precinto-col { display: none; }
+  }
   </style>
 </head>
 <body class="dark">
@@ -878,6 +1068,62 @@
       Admin
     </button>
   </nav>
+</div>
+
+<div id="jefe-panel" style="display:none">
+  <div class="topbar">
+    <div style="display:flex;align-items:center;gap:14px">
+      <img src="icon-jefe.png" alt="MetriLab" style="width:60px;height:60px;border-radius:14px;box-shadow:0 0 20px rgba(155,89,246,0.3)">
+      <div>
+        <div class="topbar-title">MetriLab · Panel del Jefe</div>
+        <div class="topbar-sub">Monitoreo en tiempo real</div>
+      </div>
+    </div>
+    <div class="topbar-right">
+      <a href="dashboard.html" class="nav-link">📊 Dashboard mensual</a>
+      <a class="nav-link" onclick="cerrarSesion()">🚪 Salir</a>
+      <div>
+        <span class="status-dot"></span>
+        <span class="status-text" id="jefe-status-text">Conectando...</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="metrics-grid">
+    <div class="metric-card">
+      <div class="metric-val" id="jefe-total-lotes">0</div>
+      <div class="metric-label">Lotes totales</div>
+    </div>
+    <div class="metric-card cyan">
+      <div class="metric-val" id="jefe-total-medidores">0</div>
+      <div class="metric-label">Medidores</div>
+    </div>
+    <div class="metric-card green">
+      <div class="metric-val" id="jefe-lotes-hoy">0</div>
+      <div class="metric-label">Lotes hoy</div>
+    </div>
+  </div>
+
+  <div class="section-title">📋 Lotes por operario</div>
+
+  <div class="filter-bar" id="jefe-filter-bar">
+    <button class="filter-btn active" onclick="jefeFiltrar('todos')">Todos</button>
+    <button class="filter-btn" onclick="jefeFiltrar('Joseph')">Joseph</button>
+    <button class="filter-btn" onclick="jefeFiltrar('Marco')">Marco</button>
+  </div>
+
+  <div class="filter-bar" id="jefe-filter-bar-estado">
+    <button class="filter-btn" onclick="jefeFiltrarEstado('todos')">Todos los estados</button>
+    <button class="filter-btn active" onclick="jefeFiltrarEstado('activos')">✅ Activos</button>
+    <button class="filter-btn" id="jefe-btn-filtro-eliminados" onclick="jefeFiltrarEstado('eliminados')">❌ Eliminados</button>
+  </div>
+
+  <div id="jefe-lista-lotes">
+    <div class="loading">
+      <div class="spinner"></div>
+      <p style="font-size:13px;color:rgba(255,255,255,0.6)">Cargando lotes desde Firebase...</p>
+    </div>
+  </div>
 </div>
 
 <script>
