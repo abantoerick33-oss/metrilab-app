@@ -1741,7 +1741,42 @@ function actualizarProgreso() {
 }
 
 // LOTES PENDIENTES (esperando resultado final)
-function guardarComoPendiente() {
+// 1. Añadir el motor de IndexedDB al inicio o junto a tus funciones de almacenamiento
+const DB_NAME = 'MetriLabDB';
+const STORE_NAME = 'lotes_pendientes';
+let dbInstance = null;
+
+function abrirIndexedDB() {
+  return new Promise((resolve, reject) => {
+    if (dbInstance) return resolve(dbInstance);
+    const request = indexedDB.open(DB_NAME, 1);
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => {
+      dbInstance = request.result;
+      resolve(dbInstance);
+    };
+    request.onupgradeneeded = (event) => {
+      const db = event.target.result;
+      if (!db.objectStoreNames.contains(STORE_NAME)) {
+        db.objectStoreNames.createIndex(STORE_NAME, 'lote', { unique: true });
+      }
+    };
+  });
+}
+
+async function guardarPendienteDB(loteObj) {
+  const db = await abrirIndexedDB();
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction(STORE_NAME, 'readwrite');
+    const store = transaction.objectStore(STORE_NAME);
+    const request = store.put(loteObj);
+    request.onsuccess = () => resolve(true);
+    request.onerror = () => reject(request.error);
+  });
+}
+
+// 2. Modificar la función guardarComoPendiente para usar la base de datos asíncrona
+async function guardarComoPendiente() {
   if (loteActual.length === 0) { showToast('No hay medidores'); return; }
   if (!observacionesActual.every(o => o !== "")) { showToast('Faltan observaciones'); return; }
   if (loteEnEdicion) { showToast('Este lote ya estaba pendiente'); return; }
@@ -1750,15 +1785,24 @@ function guardarComoPendiente() {
   const lote = loteCodigoAsignado || getLote();
   const fecha = getFecha();
 
-  lotesPendientes.push({
+  const nuevoPendiente = {
     lote, fecha, operario,
     medidores: loteActual, fotos: fotosActual,
     observaciones: observacionesActual, comentarios: comentariosActual,
     horaInicio: Date.now(),
     firebaseId: loteFirebaseId
-  });
-  localStorage.setItem('metrilab_pendientes', JSON.stringify(lotesPendientes));
+  };
 
+  try {
+    // Almacenamiento robusto sin límite de 5MB
+    await guardarPendienteDB(nuevoPendiente);
+  } catch (err) {
+    console.error('Error guardando en IndexedDB:', err);
+    showToast('⚠️ Error al guardar el lote pendiente en la memoria local');
+    return;
+  }
+
+  // Limpieza de variables...
   loteActual = [];
   fotosActual = [];
   observacionesActual = [];
@@ -1769,6 +1813,7 @@ function guardarComoPendiente() {
   loteFirebaseId = null;
   loteCodigoAsignado = null;
   creandoLotePromise = null;
+  
   document.getElementById('resultado-actual').innerHTML = '';
   document.getElementById('warning-anomaly-container').innerHTML = '';
   document.getElementById('lista-observaciones').innerHTML = '';
@@ -1776,10 +1821,11 @@ function guardarComoPendiente() {
   document.getElementById('confirmar-check').checked = false;
   document.getElementById('file-camara').value = '';
   document.getElementById('file-galeria').value = '';
+  
   actualizarProgreso();
   iniciarRegistro();
-  actualizarBadgePendientes();
-  showToast(`⏸️ Lote ${lote} guardado como pendiente. Complétalo cuando tengas los resultados finales.`);
+  await actualizarBadgePendientes(); // Ahora es async
+  showToast(`⏸️ Lote ${lote} guardado como pendiente de forma segura.`);
 }
 
 function actualizarBadgePendientes() {
