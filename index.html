@@ -3,2119 +3,655 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="theme-color" content="#0A0A0F">
-  <title>MetriLab</title>
-  <link rel="manifest" href="manifest.json">
-  <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
-<script type="module">
-  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-  import { getFirestore, collection, addDoc, doc, updateDoc, getDoc, getDocs, query, where, orderBy, limit, serverTimestamp, increment, onSnapshot } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
-  import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
-
-  const firebaseConfig = {
-    apiKey: "AIzaSyCpRopyllFTQu3puQtRlLWAy83JXXgvXI0",
-    authDomain: "metrilab-appjefe.firebaseapp.com",
-    projectId: "metrilab-appjefe",
-    storageBucket: "metrilab-appjefe.firebasestorage.app",
-    messagingSenderId: "407817648389",
-    appId: "1:407817648389:web:425dcf5f446ecd3a2f5f6c",
-    measurementId: "G-WBYTEMYJRK"
-  };
-  const appFirebase = initializeApp(firebaseConfig);
-  const db = getFirestore(appFirebase);
-  const auth = getAuth(appFirebase);
-  window.operarioActual = null;
-
-  function entrarAlApp(nombre) {
-    window.operarioActual = nombre;
-    document.getElementById('login-screen').style.display = 'none';
-    document.getElementById('setup-screen').style.display = 'none';
-    const sel = document.getElementById('operario-select');
-    if (sel) {
-      sel.innerHTML = `<option value="${nombre}">${nombre}</option>`;
-      sel.disabled = true;
-    }
-    window.iniciarApp();
-  }
-
-  window.intentarLogin = async function() {
-    const usuarioInput = document.getElementById('login-usuario').value.trim();
-    const claveInput = document.getElementById('login-clave').value;
-    const errBox = document.getElementById('login-error');
-    errBox.textContent = '';
-    if (!usuarioInput || !claveInput) { errBox.textContent = 'Completa usuario y clave.'; return; }
-
-    const btn = document.getElementById('login-btn');
-    btn.disabled = true; btn.textContent = 'Ingresando...';
-
-    try {
-      const q = query(collection(db, "usuarios"), where("usuario", "==", usuarioInput));
-      const snap = await getDocs(q);
-      if (snap.empty) { errBox.textContent = 'Usuario no encontrado.'; return; }
-
-      const userSnap = snap.docs[0];
-      const uid = userSnap.id;
-      const userData = userSnap.data();
-
-      if (userData.bloqueadoHasta && userData.bloqueadoHasta.toDate && userData.bloqueadoHasta.toDate() > new Date()) {
-        const minRestantes = Math.ceil((userData.bloqueadoHasta.toDate() - new Date()) / 60000);
-        errBox.textContent = `Cuenta bloqueada. Intenta de nuevo en ${minRestantes} min.`;
-        return;
-      }
-
-      const emailInterno = `${usuarioInput.toLowerCase()}@metrilab.local`;
-      try {
-        await signInWithEmailAndPassword(auth, emailInterno, claveInput);
-      } catch (authErr) {
-        const nuevosIntentos = (userData.intentosFallidos || 0) + 1;
-        if (nuevosIntentos >= 3) {
-          const bloqueoHasta = new Date(Date.now() + 3 * 60000);
-          await updateDoc(doc(db, "usuarios", uid), { intentosFallidos: nuevosIntentos, bloqueadoHasta: bloqueoHasta });
-          await addDoc(collection(db, "alertas"), {
-            tipo: "bloqueo_cuenta",
-            usuario: userData.nombre,
-            fecha: serverTimestamp(),
-            mensaje: `La cuenta de ${userData.nombre} fue bloqueada 3 minutos tras 3 intentos fallidos.`,
-            vista: false
-          });
-          errBox.textContent = 'Clave incorrecta 3 veces. Cuenta bloqueada por 3 minutos.';
-        } else {
-          await updateDoc(doc(db, "usuarios", uid), { intentosFallidos: nuevosIntentos });
-          errBox.textContent = `Clave incorrecta. Intento ${nuevosIntentos} de 3.`;
-        }
-        return;
-      }
-
-      await updateDoc(doc(db, "usuarios", uid), { intentosFallidos: 0, bloqueadoHasta: null, ultimoAcceso: serverTimestamp() });
-
-      if (userData.rol === 'operario') {
-        entrarAlApp(userData.nombre);
-      } else if (userData.rol === 'jefe') {
-        entrarAlPanelJefe(userData.nombre);
-      } else {
-        await signOut(auth);
-        errBox.textContent = 'Esta cuenta no tiene un rol válido.';
-        return;
-      }
-    } catch (e) {
-      console.error(e);
-      errBox.textContent = 'Error de conexión. Intenta de nuevo.';
-    } finally {
-      btn.disabled = false; btn.textContent = 'Ingresar';
-    }
-  };
-
-  window.cerrarSesion = async function() {
-    if (!confirm('¿Cerrar sesión?')) return;
-    await signOut(auth);
-    window.operarioActual = null;
-    document.getElementById('app').style.display = 'none';
-    document.getElementById('jefe-panel').style.display = 'none';
-    document.getElementById('setup-screen').style.display = 'none';
-    document.getElementById('login-usuario').value = '';
-    document.getElementById('login-clave').value = '';
-    document.getElementById('login-screen').style.display = 'flex';
-  };
-
-  onAuthStateChanged(auth, async (user) => {
-    if (user) {
-      try {
-        const snap = await getDoc(doc(db, "usuarios", user.uid));
-        if (snap.exists() && snap.data().rol === 'operario') {
-          entrarAlApp(snap.data().nombre);
-          return;
-        }
-        if (snap.exists() && snap.data().rol === 'jefe') {
-          entrarAlPanelJefe(snap.data().nombre);
-          return;
-        }
-      } catch (e) { console.error(e); }
-    }
-    document.getElementById('login-screen').style.display = 'flex';
-  });
-
-  window.guardarLoteEnFirebase = async function(lote, operario, fecha, medidores, observaciones, registrosFinales) {
-    try {
-     const medidoresFirestore = medidores.map((m, i) => ({
-        serie_medidor: m.serie_medidor || '',
-        anio: m.anio_medidor || 'N/D',
-        registro: String(m.registro || '0'),
-        registro_final: String(registrosFinales[i] || m.registro || '0'),
-        unidad: 'm³',
-        serie_precinto: m.serie_precinto || 'N/D',
-        observacion: observaciones[i] || 'NINGUNA'
-      }));
-      const docRef = await addDoc(collection(db, "lotes"), {
-        lote, operario, fecha,
-        cantidadMedidores: medidores.length,
-        medidores: medidoresFirestore,
-        origen: "app",
-        eliminado: false,
-        motivoEliminacion: "",
-        creado: serverTimestamp()
-      });
-      return docRef.id;
-    } catch (e) {
-      console.error("Error guardando lote en Firebase:", e);
-      return null;
-    }
-  };
-
-  window.eliminarLoteEnFirebase = async function(firebaseId, motivo) {
-    if (!firebaseId) return false;
-    try {
-      await updateDoc(doc(db, "lotes", firebaseId), {
-        eliminado: true,
-        motivoEliminacion: motivo
-      });
-      return true;
-    } catch (e) {
-      console.error("Error eliminando lote en Firebase:", e);
-      return false;
-    }
-  };
-
-  window.obtenerResumenDesdeFirebase = async function(fechaISO) {
-    try {
-      const q = query(collection(db, "lotes"), orderBy("creado", "desc"), limit(20));
-      const snap = await getDocs(q);
-      const lotes = [];
-      snap.forEach(d => { const data = d.data(); if (!data.eliminado) lotes.push({ id: d.id, ...data }); });
-      const lotesHoy = lotes.filter(l => l.lote && l.lote.includes(`-VP-${fechaISO}`));
-      return { lotesHoy, recientes: lotes.slice(0, 5) };
-    } catch (e) {
-      console.error("Error obteniendo resumen desde Firebase:", e);
-      return null;
-    }
-  };
-
-  window.crearLoteEnFirebase = async function(lote, operario, fecha) {
-    try {
-      const docRef = await addDoc(collection(db, "lotes"), {
-        lote, operario, fecha,
-        cantidadMedidores: 0,
-        medidores: {},
-        origen: "app",
-        eliminado: false,
-        motivoEliminacion: "",
-        creado: serverTimestamp()
-      });
-      return docRef.id;
-    } catch (e) {
-      console.error("Error creando lote en Firebase:", e);
-      return null;
-    }
-  };
-
-  window.reordenarMedidoresEnFirebase = async function(loteId, mapaCompleto) {
-    if (!loteId) return false;
-    try {
-      await updateDoc(doc(db, "lotes", loteId), {
-        medidores: mapaCompleto
-      });
-      return true;
-    } catch (e) {
-      console.error("Error reordenando medidores en Firebase:", e);
-      return false;
-    }
-  };
-
-  window.actualizarMedidorEnFirebase = async function(loteId, slot, datosMedidor) {
-    if (!loteId) return false;
-    try {
-      const campo = `medidores.${slot}`;
-      await updateDoc(doc(db, "lotes", loteId), {
-        [campo]: datosMedidor,
-        cantidadMedidores: increment(1)
-      });
-      return true;
-    } catch (e) {
-      console.error("Error actualizando medidor en Firebase:", e);
-      return false;
-    }
-  };
-
-  window.finalizarLoteEnFirebase = async function(loteId, observaciones, registrosFinales, datos) {
-    if (!loteId) return false;
-    try {
-      const updates = {};
-      datos.forEach((d, i) => {
-        updates[`medidores.${i}.observacion`] = observaciones[i] || 'NINGUNA';
-        updates[`medidores.${i}.registro_final`] = String(registrosFinales[i] || d.registro || '0');
-        updates[`medidores.${i}.estado`] = 'terminado';
-        updates[`medidores.${i}.fecha_terminado`] = serverTimestamp();
-      });
-      await updateDoc(doc(db, "lotes", loteId), updates);
-      return true;
-    } catch (e) {
-      console.error("Error finalizando lote en Firebase:", e);
-      return false;
-    }
-  };
-
-  // ===== PANEL DEL JEFE =====
-  let jefeTodosLotes = [];
-  let jefeFiltroActual = 'todos';
-  let jefeFiltroEstado = 'activos';
-  let jefePanelIniciado = false;
-
-  window.entrarAlPanelJefe = function(nombre) {
-    window.operarioActual = nombre;
-    document.getElementById('login-screen').style.display = 'none';
-    document.getElementById('setup-screen').style.display = 'none';
-    document.getElementById('jefe-panel').style.display = 'block';
-    if (!jefePanelIniciado) {
-      jefePanelIniciado = true;
-      iniciarPanelJefe();
-    }
-  };
-
-  function iniciarPanelJefe() {
-    const q = query(collection(db, "lotes"), orderBy("creado", "desc"));
-    onSnapshot(q, (snapshot) => {
-      jefeTodosLotes = [];
-      snapshot.forEach((d) => {
-        jefeTodosLotes.push({ id: d.id, ...d.data() });
-      });
-      document.getElementById('jefe-status-text').textContent = 'Conectado · Actualizando en tiempo real';
-      actualizarPanelJefe();
-    }, (error) => {
-      console.error(error);
-      document.getElementById('jefe-status-text').textContent = 'Error de conexión';
-    });
-  }
-
-  window.jefeFiltrar = function(operario) {
-    jefeFiltroActual = operario;
-    document.querySelectorAll('#jefe-filter-bar .filter-btn').forEach(b => b.classList.remove('active'));
-    event.target.classList.add('active');
-    actualizarPanelJefe();
-  };
-
-  window.jefeFiltrarEstado = function(estado) {
-    jefeFiltroEstado = estado;
-    document.querySelectorAll('#jefe-filter-bar-estado .filter-btn').forEach(b => b.classList.remove('active'));
-    event.target.classList.add('active');
-    actualizarPanelJefe();
-  };
-
-  window.jefeToggleDetalles = function(id) {
-    const el = document.getElementById('jefe-detalles-' + id);
-    el.classList.toggle('show');
-  };
-
-  function actualizarPanelJefe() {
-    let lotesFiltrados = jefeTodosLotes;
-    if (jefeFiltroActual !== 'todos') {
-      lotesFiltrados = lotesFiltrados.filter(l =>
-        (l.operario || '').toLowerCase().includes(jefeFiltroActual.toLowerCase())
-      );
-    }
-    if (jefeFiltroEstado === 'activos') {
-      lotesFiltrados = lotesFiltrados.filter(l => !l.eliminado);
-    } else if (jefeFiltroEstado === 'eliminados') {
-      lotesFiltrados = lotesFiltrados.filter(l => l.eliminado);
-    }
-
-    const lotesActivos = jefeTodosLotes.filter(l => !l.eliminado);
-    document.getElementById('jefe-total-lotes').textContent = lotesActivos.length;
-    document.getElementById('jefe-total-medidores').textContent = lotesActivos.reduce((a, l) => a + (l.cantidadMedidores || (l.medidores?.length || 0)), 0);
-
-    const hoy = new Date().toLocaleDateString('es-PE', {timeZone: 'America/Lima'});
-    const lotesHoy = lotesActivos.filter(l => {
-      if (!l.fecha) return false;
-      return l.fecha.includes(hoy.replaceAll('/', '/')) || (l.creado && new Date(l.creado.seconds * 1000).toLocaleDateString('es-PE', {timeZone: 'America/Lima'}) === hoy);
-    });
-    document.getElementById('jefe-lotes-hoy').textContent = lotesHoy.length;
-
-    const totalEliminados = jefeTodosLotes.filter(l => l.eliminado).length;
-    document.getElementById('jefe-btn-filtro-eliminados').textContent = `❌ Eliminados (${totalEliminados})`;
-
-    const contenedor = document.getElementById('jefe-lista-lotes');
-    if (lotesFiltrados.length === 0) {
-      contenedor.innerHTML = `
-        <div class="empty-state">
-          <svg viewBox="0 0 24 24"><path d="M19 3H5c-1.11 0-2 .89-2 2v14c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.11-.9-2-2-2zm-3.5 11l-4.5-4.5-4.5 4.5-1-1 5.5-5.5 5.5 5.5-1 1z"/></svg>
-          <p>No hay lotes para mostrar</p>
-        </div>`;
-      return;
-    }
-
-    contenedor.innerHTML = lotesFiltrados.map(l => {
-      const origen = (l.origen || 'app') === 'web' ? 'web' : 'app';
-      const origenLabel = origen === 'web' ? '🌐 Web' : '📱 App móvil';
-      return `
-      <div class="lote-card ${l.eliminado ? 'eliminado' : ''}">
-        <div class="lote-header">
-          <div class="lote-title">${l.lote || 'Sin código'}<span class="origen-tag ${origen}">${origenLabel}</span></div>
-          <span class="lote-badge ${l.eliminado ? 'eliminado' : ''}">${l.eliminado ? '❌ Eliminado' : '✓ OK'}</span>
-        </div>
-        ${l.eliminado ? `<div class="lote-motivo">🗑️ Motivo de eliminación: ${l.motivoEliminacion || 'Sin especificar'}</div>` : ''}
-        <div class="lote-info">
-          <span>👤 <strong>${l.operario || 'Sin operario'}</strong></span>
-          <span>📅 <strong>${l.fecha || 'Sin fecha'}</strong></span>
-          <span>📦 <strong>${l.cantidadMedidores || (l.medidores?.length || 0)} medidores</strong></span>
-        </div>
-        <button class="toggle-btn" onclick="jefeToggleDetalles('${l.id}')">Ver detalles ▾</button>
-        <div class="lote-detalles" id="jefe-detalles-${l.id}">
-          ${renderMedidoresJefe(l.medidores || [])}
-        </div>
-      </div>
-    `;
-    }).join('');
-  }
-
-  function renderMedidoresJefe(medidoresInput) {
-    const medidores = Array.isArray(medidoresInput) ? medidoresInput : Object.values(medidoresInput || {});
-    if (!medidores.length) return '<p style="font-size:12px;color:rgba(255,255,255,0.4)">Sin medidores</p>';
-    return `
-      <div class="medidor-row" style="font-weight:600;color:rgba(255,255,255,0.6);text-transform:uppercase;font-size:9px;letter-spacing:1px">
-        <span>#</span>
-        <span>Serie medidor</span>
-        <span>Año</span>
-        <span>Registro</span>
-        <span class="med-precinto-col">Precinto</span>
-      </div>
-      ${medidores.map((m, i) => `
-        <div class="medidor-row">
-          <span class="med-num">${i+1}</span>
-          <span>${m.serie_medidor || '—'}</span>
-          <span>${m.anio || 'N/D'}</span>
-          <span>${m.registro || '—'} ${m.unidad || 'm³'}</span>
-          <span class="med-precinto-col">${m.serie_precinto || 'N/D'}</span>
-        </div>
-      `).join('')}
-    `;
-  }
-</script>
-<style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    :root {
-      --accent-1: #0EA5E9;
-      --accent-2: #00E5FF;
-      --accent-rgb: 0, 212, 255;
-    }
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-      background: var(--bg-main);
-      color: var(--text-main);
-      min-height: 100vh;
-      overflow-x: hidden;
-      transition: background 0.3s, color 0.3s;
-    }
-
-    /* TEMA OSCURO (default) */
-    body.dark {
-      --bg-main: #0A0A0F;
-      --text-main: white;
-      --text-secondary: rgba(255,255,255,0.6);
-      --text-muted: rgba(255,255,255,0.4);
-      --card-bg: linear-gradient(135deg, rgba(26, 26, 46, 0.7), rgba(42, 26, 62, 0.3));
-      --card-border: rgba(58, 46, 93, 0.3);
-      --input-bg: rgba(26, 26, 46, 0.6);
-      --input-border: rgba(58, 46, 93, 0.5);
-      --gradient-bg: radial-gradient(circle at center, #1A1A2E 0%, #0A0A0F 100%);
-    }
-    body.light {
-      --bg-main: #f8fafc;
-      --text-main: #1e293b;
-      --text-secondary: rgba(30,41,59,0.7);
-      --text-muted: rgba(30,41,59,0.5);
-      --card-bg: white;
-      --card-border: #e2e8f0;
-      --input-bg: #f8fafc;
-      --input-border: #e2e8f0;
-      --gradient-bg: radial-gradient(circle at center, #ffffff 0%, #f1f5f9 100%);
-    }
-
-    body::before {
-      content: '';
-      position: fixed;
-      inset: 0;
-      background: var(--gradient-bg);
-      z-index: -2;
-    }
-    body.dark::after {
-      content: '';
-      position: fixed;
-      inset: 0;
-      background-image:
-        radial-gradient(circle at 20% 30%, rgba(var(--accent-rgb), 0.15) 0%, transparent 50%),
-        radial-gradient(circle at 80% 70%, rgba(0, 212, 255, 0.1) 0%, transparent 50%);
-      z-index: -1;
-      pointer-events: none;
-    }
-
-    #app { max-width: 430px; margin: 0 auto; min-height: 100vh; position: relative; padding-bottom: 90px; }
-
-    .topbar { padding: 20px 20px 10px; display: flex; align-items: center; justify-content: space-between; }
-    .topbar-title {
-      font-size: 24px; font-weight: bold;
-      background: linear-gradient(135deg, var(--accent-1), var(--accent-2));
-      -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
-    }
-    .topbar-icons { display: flex; gap: 12px; align-items: center; }
-    .topbar-icons svg { width: 22px; height: 22px; fill: var(--text-secondary); cursor: pointer; }
-
-    .theme-toggle {
-      background: var(--input-bg); border: 1px solid var(--input-border);
-      padding: 6px 10px; border-radius: 20px; cursor: pointer;
-      font-size: 16px; color: var(--text-main);
-    }
-
-    .glass-card {
-      background: var(--card-bg);
-      backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
-      border: 1px solid var(--card-border);
-      border-radius: 20px; padding: 20px; margin-bottom: 16px;
-    }
-    body.dark .glass-card { box-shadow: 0 0 30px rgba(var(--accent-rgb), 0.1); }
-    body.light .glass-card { box-shadow: 0 4px 20px rgba(0,0,0,0.05); }
-
-    .glass-card-sm {
-      background: var(--card-bg);
-      border-radius: 16px; padding: 16px; border: 1px solid var(--card-border);
-    }
-
-    .screen { display: none; padding: 0 20px; }
-    .screen.active { display: block; }
-
-    .greeting-title { font-size: 22px; font-weight: bold; margin-bottom: 8px; color: var(--text-main); }
-    .greeting-sub { color: var(--text-secondary); font-size: 14px; margin-bottom: 16px; }
-
-    .progress-label { display: flex; justify-content: space-between; margin-bottom: 6px; }
-    .progress-label span:first-child { color: var(--text-secondary); font-size: 12px; }
-    .progress-label span:last-child { color: #00D4FF; font-size: 12px; font-weight: bold; }
-    .progress-track { height: 6px; background: rgba(128,128,128,0.15); border-radius: 10px; overflow: hidden; }
-    .progress-fill {
-      height: 100%; background: linear-gradient(90deg, var(--accent-1), var(--accent-2));
-      border-radius: 10px; box-shadow: 0 0 10px rgba(var(--accent-rgb), 0.5); transition: width 0.3s;
-    }
-
-    .metrics-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 20px; }
-    .metric-card {
-      padding: 16px; background: var(--card-bg);
-      border-radius: 16px; border: 1px solid rgba(var(--accent-rgb), 0.2); text-align: center;
-    }
-    .metric-card.cyan { border-color: rgba(0, 212, 255, 0.2); }
-    .metric-icon { width: 28px; height: 28px; margin: 0 auto 8px; }
-    .metric-icon.purple { color: var(--accent-2); }
-    .metric-icon.cyan { color: #00D4FF; }
-    .metric-val { font-size: 28px; font-weight: bold; color: var(--text-main); }
-    .metric-label { color: var(--text-secondary); font-size: 12px; }
-
-    .btn-glow {
-      width: 100%; height: 60px;
-      background: linear-gradient(135deg, var(--accent-1), var(--accent-2));
-      border: none; border-radius: 16px; color: white; font-weight: bold; font-size: 16px;
-      letter-spacing: 1.2px; cursor: pointer;
-      box-shadow: 0 0 30px rgba(var(--accent-rgb), 0.4);
-      animation: glow-pulse 2s ease-in-out infinite;
-      display: flex; align-items: center; justify-content: center; gap: 10px; margin-bottom: 20px;
-    }
-    @keyframes glow-pulse {
-      0%, 100% { box-shadow: 0 0 30px rgba(var(--accent-rgb), 0.4); }
-      50% { box-shadow: 0 0 50px rgba(var(--accent-rgb), 0.7), 0 0 80px rgba(0, 212, 255, 0.3); }
-    }
-    .btn-glow:disabled { opacity: 0.5; animation: none; cursor: not-allowed; }
-
-    .btn-secondary {
-      width: 100%; padding: 14px;
-      background: rgba(var(--accent-rgb), 0.15); border: 1px solid rgba(var(--accent-rgb), 0.3);
-      border-radius: 12px; color: var(--accent-2); font-size: 13px; font-weight: 500; cursor: pointer; margin-bottom: 8px;
-    }
-    .btn-red {
-      width: 100%; padding: 12px;
-      background: rgba(220, 38, 38, 0.2); border: 1px solid rgba(220, 38, 38, 0.4);
-      border-radius: 12px; color: #ef4444; font-size: 13px; cursor: pointer;
-    }
-
-    .section-title { font-size: 18px; font-weight: bold; color: var(--text-main); margin-bottom: 16px; }
-
-    .empty-state { padding: 30px; border: 1px solid var(--card-border); border-radius: 12px; text-align: center; }
-    .empty-state svg { width: 40px; height: 40px; fill: var(--text-muted); margin: 0 auto 8px; }
-    .empty-state p { color: var(--text-secondary); font-size: 14px; }
-    .empty-state span { color: var(--text-muted); font-size: 12px; }
-
-    .lote-row {
-      display: flex; justify-content: space-between; align-items: center;
-      padding: 12px 0; border-bottom: 1px solid var(--card-border);
-    }
-    .lote-row:last-child { border: none; }
-    .lote-title { font-size: 13px; font-weight: 500; color: var(--text-main); }
-    .lote-sub { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
-
-    .badge {
-      display: inline-block; padding: 4px 10px; border-radius: 8px; font-size: 11px; font-weight: 500;
-      background: rgba(0, 212, 255, 0.15); color: #00D4FF; border: 1px solid rgba(0, 212, 255, 0.3);
-    }
-    .badge-offline { background: rgba(245,158,11,0.15); color: #f59e0b; border-color: rgba(245,158,11,0.3); }
-
-    .camera-box {
-      background: linear-gradient(135deg, rgba(var(--accent-rgb), 0.2), rgba(0, 212, 255, 0.1));
-      border: 2px dashed rgba(var(--accent-rgb), 0.4);
-      border-radius: 20px; padding: 24px 20px; text-align: center; margin-bottom: 16px;
-    }
-    .camera-box svg { width: 44px; height: 44px; fill: var(--text-main); margin-bottom: 10px; filter: drop-shadow(0 0 10px rgba(var(--accent-rgb), 0.5)); }
-    .camera-box p { color: var(--text-main); font-size: 14px; font-weight: 500; margin-bottom: 4px; }
-    .camera-box span { color: var(--text-secondary); font-size: 12px; }
-    .camera-buttons { display: flex; gap: 10px; margin-top: 14px; }
-    .camera-btn {
-      flex: 1; border: none; border-radius: 10px; padding: 10px;
-      font-size: 12px; font-weight: 600; cursor: pointer; color: white;
-    }
-    .camera-btn.primary { background: linear-gradient(135deg, var(--accent-1), var(--accent-2)); }
-    .camera-btn.outline { background: rgba(128,128,128,0.15); border: 1px solid rgba(128,128,128,0.3); color: var(--text-main); }
-
-    .select-box, .input-box {
-      background: var(--input-bg); border: 1px solid var(--input-border);
-      border-radius: 10px; padding: 12px; color: var(--text-main); width: 100%;
-      margin-bottom: 12px; font-size: 13px;
-    }
-    .textarea-box {
-      background: var(--input-bg); border: 1px solid var(--input-border);
-      border-radius: 10px; padding: 10px; color: var(--text-main); width: 100%;
-      margin-top: 8px; font-size: 12px; font-family: inherit; resize: vertical; min-height: 60px;
-    }
-
-    .resultado {
-      background: linear-gradient(135deg, rgba(0, 212, 255, 0.1), rgba(var(--accent-rgb), 0.05));
-      border: 1px solid rgba(0, 212, 255, 0.3);
-      border-radius: 16px; padding: 16px; margin-bottom: 16px;
-    }
-    .resultado-title { font-size: 12px; color: #00D4FF; font-weight: bold; margin-bottom: 10px; }
-    .resultado-row { display: flex; justify-content: space-between; font-size: 12px; padding: 4px 0; }
-    .resultado-key { color: var(--text-secondary); }
-    .resultado-val { color: var(--text-main); font-weight: 500; }
-    .resultado-warning { background: rgba(245, 158, 11, 0.1); border-color: rgba(245, 158, 11, 0.4); }
-    .resultado-warning .resultado-title { color: #f59e0b; }
-
-    .field-manual {
-      background: rgba(245, 158, 11, 0.1); border: 1px solid rgba(245, 158, 11, 0.3);
-      border-radius: 10px; padding: 10px; margin: 8px 0;
-    }
-    .field-manual label { display: block; color: #f59e0b; font-size: 11px; margin-bottom: 4px; font-weight: 600; }
-    .field-manual input {
-      width: 100%; padding: 8px; background: var(--input-bg);
-      border: 1px solid var(--input-border); border-radius: 8px; color: var(--text-main); font-size: 12px;
-    }
-
-    .medidor-item {
-      background: var(--input-bg); border: 1px solid var(--card-border);
-      border-radius: 12px; padding: 12px; margin-bottom: 10px;
-    }
-    .medidor-num {
-      display: inline-block;
-      background: linear-gradient(135deg, var(--accent-1), var(--accent-2));
-      color: white; padding: 3px 10px; border-radius: 8px;
-      font-size: 11px; font-weight: 600;
-    }
-    .btn-delete {
-      background: rgba(220,38,38,0.2); border: 1px solid rgba(220,38,38,0.4);
-      color: #ef4444; padding: 4px 10px; border-radius: 6px; font-size: 11px; cursor: pointer;
-    }
-    .medidor-data { font-size: 11px; color: var(--text-secondary); margin: 8px 0; }
-    .medidor-select {
-      width: 100%; padding: 10px; font-size: 12px;
-      background: var(--input-bg); border: 1px solid var(--input-border);
-      border-radius: 8px; color: var(--text-main);
-    }
-    .medidor-select.empty { border-color: rgba(245, 158, 11, 0.5); background: rgba(245, 158, 11, 0.1); }
-    .med-field { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px; }
-    .med-field-item label { display: block; font-size: 10px; color: var(--text-secondary); margin-bottom: 3px; font-weight: 600; }
-    .med-field-item input {
-      width: 100%; padding: 8px; font-size: 12px;
-      background: var(--input-bg); border: 1px solid var(--input-border);
-      border-radius: 8px; color: var(--text-main);
-    }
-    .med-field-item input.empty { border-color: rgba(245,158,11,0.5); background: rgba(245,158,11,0.1); }
-    .med-diff {
-      background: rgba(46, 139, 87, 0.15); border: 1px solid rgba(46,139,87,0.3);
-      padding: 6px 10px; border-radius: 8px; margin-top: 8px;
-      font-size: 11px; color: #10b981; text-align: center; font-weight: 600;
-    }
-
-    .confirm-card {
-      background: rgba(245, 158, 11, 0.1); border: 1px solid rgba(245, 158, 11, 0.3);
-      border-radius: 12px; padding: 12px; margin-bottom: 12px;
-    }
-    .confirm-card label { display: flex; align-items: center; gap: 8px; cursor: pointer; }
-    .confirm-card input { width: 18px; height: 18px; }
-    .confirm-card span { font-size: 12px; color: var(--text-main); }
-
-    .bottom-nav {
-      position: fixed; bottom: 0; left: 50%; transform: translateX(-50%);
-      width: 100%; max-width: 430px;
-      background: linear-gradient(180deg, transparent, var(--bg-main) 30%);
-      padding: 30px 20px 20px; display: flex; justify-content: space-around; z-index: 100;
-    }
-    .tab {
-      display: flex; flex-direction: column; align-items: center; gap: 4px;
-      background: none; border: none; color: var(--text-muted);
-      font-size: 10px; cursor: pointer; padding: 0;
-    }
-    .tab.active { color: var(--accent-2); }
-    .tab-icon {
-      width: 40px; height: 40px; border-radius: 50%;
-      display: flex; align-items: center; justify-content: center; transition: background 0.3s;
-    }
-    .tab.active .tab-icon { background: rgba(var(--accent-rgb), 0.2); }
-    .tab svg { width: 22px; height: 22px; fill: currentColor; }
-
-    .toast {
-      position: fixed; top: 80px; left: 50%; transform: translateX(-50%);
-      background: linear-gradient(135deg, var(--accent-1), var(--accent-2));
-      color: white; padding: 12px 24px; border-radius: 12px;
-      font-size: 13px; z-index: 999; display: none;
-      box-shadow: 0 0 30px rgba(var(--accent-rgb), 0.5);
-      max-width: 90%; text-align: center;
-    }
-    .toast.show { display: block; animation: fadeIn 0.3s; }
-    @keyframes fadeIn { from { opacity: 0; transform: translateX(-50%) translateY(-10px); } to { opacity: 1; transform: translateX(-50%) translateY(0); } }
-
-    .setup-screen {
-      position: fixed; inset: 0;
-      background: radial-gradient(circle at 50% 30%, #060B12 0%, #020305 75%);
-      display: flex; flex-direction: column; align-items: center;
-      padding: 24px; z-index: 1000; overflow-y: auto;
-    }
-    .setup-screen.welcome { justify-content: space-between; padding: 64px 28px 40px; text-align: center; }
-    .setup-screen.login-variant { justify-content: center; }
-
-    /* ---- icono animado tipo "ojo tecnológico" (Bienvenida) ---- */
-    .circuit-icon-wrap { width: 150px; height: 150px; margin-bottom: 18px; filter: drop-shadow(0 0 22px rgba(var(--accent-rgb), 0.55)); }
-    .circuit-icon { width: 100%; height: 100%; }
-    .circuit-icon .ring { fill: none; stroke: var(--accent-2); stroke-width: 1; }
-    .circuit-icon .ring-1 { opacity: 0.22; }
-    .circuit-icon .ring-2 { opacity: 0.4; animation: ring-pulse 3s ease-in-out infinite; }
-    .circuit-icon .ring-3 { opacity: 0.6; }
-    .circuit-icon .core { fill: var(--accent-2); animation: core-pulse 2.2s ease-in-out infinite; transform-origin: 100px 100px; }
-    .circuit-icon .spoke { stroke: var(--accent-1); stroke-width: 1; opacity: 0.55; }
-    .circuit-icon .spoke-dot { fill: var(--accent-2); opacity: 0.9; }
-    .circuit-rotate { transform-origin: 100px 100px; animation: spin-slow 26s linear infinite; }
-    @keyframes spin-slow { to { transform: rotate(360deg); } }
-    @keyframes ring-pulse { 0%, 100% { opacity: 0.28; } 50% { opacity: 0.65; } }
-    @keyframes core-pulse { 0%, 100% { transform: scale(1); opacity: 0.85; } 50% { transform: scale(1.18); opacity: 1; } }
-
-    .welcome-top { display: flex; flex-direction: column; align-items: center; width: 100%; }
-    .welcome-pre { font-size: 20px; font-weight: 600; color: #fff; }
-    .welcome-main { font-size: 32px; font-weight: 800; line-height: 1.15; margin-bottom: 14px;
-      background: linear-gradient(135deg, var(--accent-1), var(--accent-2));
-      -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
-    }
-    .welcome-tagline { font-size: 13px; line-height: 1.55; color: rgba(var(--accent-rgb), 0.75); max-width: 300px; margin-bottom: 26px; }
-    .welcome-features { display: flex; gap: 22px; }
-    .feature-icon { width: 42px; height: 42px; border-radius: 13px; border: 1px solid rgba(var(--accent-rgb), 0.4);
-      display: flex; align-items: center; justify-content: center; box-shadow: 0 0 14px rgba(var(--accent-rgb), 0.22);
-    }
-    .feature-icon svg { width: 20px; height: 20px; fill: none; stroke: var(--accent-2); stroke-width: 1.6; }
-    .welcome-bottom { width: 100%; max-width: 360px; }
-
-    /* ---- logo tipo check (Login) ---- */
-    .login-logo {
-      width: 78px; height: 78px; border-radius: 22px; background: #05070A;
-      border: 1.5px solid rgba(var(--accent-rgb), 0.6);
-      display: flex; align-items: center; justify-content: center; margin-bottom: 16px;
-      box-shadow: 0 0 28px rgba(var(--accent-rgb), 0.5), inset 0 0 18px rgba(var(--accent-rgb), 0.12);
-    }
-    .login-logo svg { width: 32px; height: 32px; }
-
-    .setup-title {
-      font-size: 30px; font-weight: 700;
-      background: linear-gradient(135deg, var(--accent-1), var(--accent-2));
-      -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
-      margin-bottom: 4px;
-    }
-    .setup-sub { color: rgba(var(--accent-rgb), 0.65); font-size: 13px; margin-bottom: 32px; text-align: center; }
-
-    .login-fields { width: 100%; max-width: 320px; }
-    .input-neon {
-      width: 100%; background: rgba(255,255,255,0.03);
-      border: 1px solid rgba(var(--accent-rgb), 0.35);
-      border-radius: 16px; padding: 15px 18px; color: #fff; font-size: 14px;
-      margin-bottom: 14px; box-shadow: 0 0 12px rgba(var(--accent-rgb), 0.12);
-      transition: box-shadow .2s, border-color .2s;
-    }
-    .input-neon::placeholder { color: rgba(var(--accent-rgb), 0.45); }
-    .input-neon:focus { outline: none; border-color: var(--accent-2); box-shadow: 0 0 20px rgba(var(--accent-rgb), 0.4); }
-    .btn-outline-glow {
-      width: 100%; height: 54px; background: transparent;
-      border: 1.5px solid var(--accent-2); border-radius: 30px;
-      color: var(--accent-2); font-weight: 700; font-size: 15px; letter-spacing: 0.5px;
-      cursor: pointer; margin-top: 4px;
-      box-shadow: 0 0 25px rgba(var(--accent-rgb), 0.45), inset 0 0 15px rgba(var(--accent-rgb), 0.1);
-    }
-    .btn-outline-glow:disabled { opacity: 0.5; cursor: not-allowed; }
-
-    .loading { text-align: center; padding: 20px; }
-    .spinner {
-      width: 36px; height: 36px;
-      border: 3px solid rgba(var(--accent-rgb), 0.2); border-top-color: var(--accent-2);
-      border-radius: 50%; animation: spin 0.8s linear infinite; margin: 0 auto 10px;
-      box-shadow: 0 0 20px rgba(var(--accent-rgb), 0.3);
-    }
-    @keyframes spin { to { transform: rotate(360deg); } }
-
-    input[type=file] { display: none; }
-    input, select, textarea { font-family: inherit; }
-
-    .warning-anomaly {
-      background: rgba(245,158,11,0.15); border: 1px solid rgba(245,158,11,0.4);
-      color: #f59e0b; padding: 10px 12px; border-radius: 10px; margin-bottom: 12px;
-      font-size: 12px; text-align: center;
-    }
-  /* ===== PANEL DEL JEFE ===== */
-  #jefe-panel { max-width: 900px; margin: 0 auto; padding: 20px; color: white; }
-  #jefe-panel .topbar { padding: 20px 0; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid rgba(155, 89, 246, 0.2); margin-bottom: 24px; flex-wrap: wrap; gap: 12px; }
-  #jefe-panel .topbar-title { font-size: 28px; font-weight: bold; background: linear-gradient(135deg, #9B59F6, #00D4FF); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
-  #jefe-panel .topbar-sub { color: rgba(255,255,255,0.5); font-size: 13px; margin-top: 4px; }
-  #jefe-panel .topbar-right { display: flex; align-items: center; gap: 16px; }
-  #jefe-panel .nav-link { background: rgba(155, 89, 246, 0.15); border: 1px solid rgba(155, 89, 246, 0.3); color: #9B59F6; padding: 8px 14px; border-radius: 10px; font-size: 12px; font-weight: 600; text-decoration: none; white-space: nowrap; cursor: pointer; }
-  #jefe-panel .status-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: #10b981; box-shadow: 0 0 10px #10b981; animation: jefePulse 2s ease-in-out infinite; }
-  @keyframes jefePulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
-  #jefe-panel .status-text { font-size: 12px; color: rgba(255,255,255,0.7); margin-left: 6px; }
-  #jefe-panel .metrics-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; margin-bottom: 24px; }
-  #jefe-panel .metric-card { background: linear-gradient(135deg, rgba(26, 26, 46, 0.7), rgba(42, 26, 62, 0.3)); backdrop-filter: blur(10px); border: 1px solid rgba(155, 89, 246, 0.2); border-radius: 16px; padding: 20px; text-align: center; }
-  #jefe-panel .metric-card.cyan { border-color: rgba(0, 212, 255, 0.3); }
-  #jefe-panel .metric-card.green { border-color: rgba(46, 204, 113, 0.3); }
-  #jefe-panel .metric-val { font-size: 32px; font-weight: bold; color: white; margin-bottom: 4px; }
-  #jefe-panel .metric-label { font-size: 12px; color: rgba(255,255,255,0.6); text-transform: uppercase; letter-spacing: 1px; }
-  #jefe-panel .section-title { font-size: 18px; font-weight: bold; color: white; margin-bottom: 16px; display: flex; align-items: center; gap: 10px; }
-  #jefe-panel .filter-bar { display: flex; gap: 10px; margin-bottom: 20px; flex-wrap: wrap; }
-  #jefe-panel .filter-btn { background: rgba(26, 26, 46, 0.6); border: 1px solid rgba(58, 46, 93, 0.5); color: rgba(255,255,255,0.7); padding: 8px 16px; border-radius: 10px; cursor: pointer; font-size: 12px; font-weight: 500; transition: all 0.3s; }
-  #jefe-panel .filter-btn.active { background: linear-gradient(135deg, #9B59F6, #00D4FF); color: white; border-color: transparent; }
-  #jefe-panel .lote-card { background: linear-gradient(135deg, rgba(26, 26, 46, 0.7), rgba(42, 26, 62, 0.3)); backdrop-filter: blur(10px); border: 1px solid rgba(58, 46, 93, 0.3); border-radius: 16px; padding: 18px; margin-bottom: 14px; transition: all 0.3s; }
-  #jefe-panel .lote-card:hover { border-color: rgba(155, 89, 246, 0.4); }
-  #jefe-panel .lote-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
-  #jefe-panel .lote-title { font-size: 16px; font-weight: 600; color: white; }
-  #jefe-panel .lote-badge { background: rgba(46, 204, 113, 0.2); color: #2ECC40; border: 1px solid rgba(46, 204, 113, 0.4); padding: 3px 10px; border-radius: 8px; font-size: 11px; font-weight: 600; }
-  #jefe-panel .lote-badge.eliminado { background: rgba(231, 76, 60, 0.2); color: #E74C3C; border-color: rgba(231, 76, 60, 0.4); }
-  #jefe-panel .lote-card.eliminado { opacity: 0.6; }
-  #jefe-panel .lote-motivo { font-size: 11px; color: #E74C3C; background: rgba(231, 76, 60, 0.1); border: 1px solid rgba(231, 76, 60, 0.25); border-radius: 8px; padding: 6px 10px; margin-bottom: 10px; }
-  #jefe-panel .origen-tag { font-size: 10px; padding: 2px 8px; border-radius: 6px; font-weight: 600; margin-left: 8px; }
-  #jefe-panel .origen-tag.web { background: rgba(0, 212, 255, 0.15); color: #00D4FF; border: 1px solid rgba(0, 212, 255, 0.3); }
-  #jefe-panel .origen-tag.app { background: rgba(155, 89, 246, 0.15); color: #9B59F6; border: 1px solid rgba(155, 89, 246, 0.3); }
-  #jefe-panel .lote-info { display: flex; gap: 20px; flex-wrap: wrap; font-size: 12px; color: rgba(255,255,255,0.6); margin-bottom: 12px; }
-  #jefe-panel .lote-info span strong { color: white; }
-  #jefe-panel .lote-detalles { display: none; background: rgba(10, 10, 15, 0.5); border-radius: 10px; padding: 12px; margin-top: 10px; }
-  #jefe-panel .lote-detalles.show { display: block; }
-  #jefe-panel .medidor-row { display: grid; grid-template-columns: 30px 1fr 0.6fr 1fr 1fr; gap: 10px; padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,0.05); font-size: 11px; align-items: center; }
-  #jefe-panel .medidor-row:last-child { border: none; }
-  #jefe-panel .med-num { background: linear-gradient(135deg, #9B59F6, #00D4FF); color: white; padding: 2px 6px; border-radius: 6px; font-size: 10px; font-weight: 600; text-align: center; }
-  #jefe-panel .toggle-btn { background: rgba(155, 89, 246, 0.15); border: 1px solid rgba(155, 89, 246, 0.3); color: #9B59F6; padding: 6px 12px; border-radius: 8px; cursor: pointer; font-size: 11px; font-weight: 500; }
-  #jefe-panel .empty-state { text-align: center; padding: 60px 20px; color: rgba(255,255,255,0.4); }
-  #jefe-panel .empty-state svg { width: 60px; height: 60px; fill: rgba(155, 89, 246, 0.3); margin-bottom: 12px; }
-  #jefe-panel .loading { text-align: center; padding: 40px; }
-  #jefe-panel .spinner { width: 40px; height: 40px; border: 3px solid rgba(155, 89, 246, 0.2); border-top-color: #9B59F6; border-radius: 50%; animation: jefeSpin 0.8s linear infinite; margin: 0 auto 10px; }
-  @keyframes jefeSpin { to { transform: rotate(360deg); } }
-  @media (max-width: 600px) {
-    #jefe-panel .medidor-row { grid-template-columns: 25px 1fr 0.6fr 1fr; font-size: 10px; }
-    #jefe-panel .med-precinto-col { display: none; }
-  }
-  </style>
+  <title>MetriLab - Control de Medidores</title>
+  <!-- Agrega aquí tus estilos y librerías externas si las tienes en el head -->
 </head>
-<body class="dark">
+<body>
 
-<div class="setup-screen login-variant" id="login-screen" style="display:none">
-  <div class="login-logo">
-    <svg viewBox="0 0 24 24" fill="none"><path d="M20 6.5 9.5 17 4 11.5" stroke="var(--accent-2)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
-  </div>
-  <div class="setup-title">MetriLab</div>
-  <div class="setup-sub">Inicia sesión para continuar</div>
-  <div class="login-fields">
-    <input class="input-neon" type="text" id="login-usuario" placeholder="Tu DNI" autocapitalize="none" onkeydown="if(event.key==='Enter')document.getElementById('login-clave').focus()">
-    <input class="input-neon" type="password" id="login-clave" placeholder="Tu clave" onkeydown="if(event.key==='Enter')intentarLogin()">
-    <div id="login-error" style="color:#fca5a5;font-size:12px;margin:-4px 0 10px;min-height:16px"></div>
-    <button class="btn-outline-glow" id="login-btn" onclick="intentarLogin()">Ingresar</button>
-  </div>
-</div>
-
-<div class="setup-screen welcome" id="setup-screen">
-  <div class="welcome-top">
-    <div class="circuit-icon-wrap">
-      <svg class="circuit-icon" viewBox="0 0 200 200">
-        <g class="circuit-rotate">
-          <line class="spoke" x1="172" y1="100" x2="195" y2="100"/><circle class="spoke-dot" cx="195" cy="100" r="3"/>
-          <line class="spoke" x1="162.35" y1="136" x2="182.27" y2="147.5"/><circle class="spoke-dot" cx="182.27" cy="147.5" r="3"/>
-          <line class="spoke" x1="136" y1="162.35" x2="147.5" y2="182.27"/><circle class="spoke-dot" cx="147.5" cy="182.27" r="3"/>
-          <line class="spoke" x1="100" y1="172" x2="100" y2="195"/><circle class="spoke-dot" cx="100" cy="195" r="3"/>
-          <line class="spoke" x1="64" y1="162.35" x2="52.5" y2="182.27"/><circle class="spoke-dot" cx="52.5" cy="182.27" r="3"/>
-          <line class="spoke" x1="37.65" y1="136" x2="17.73" y2="147.5"/><circle class="spoke-dot" cx="17.73" cy="147.5" r="3"/>
-          <line class="spoke" x1="28" y1="100" x2="5" y2="100"/><circle class="spoke-dot" cx="5" cy="100" r="3"/>
-          <line class="spoke" x1="37.65" y1="64" x2="17.73" y2="52.5"/><circle class="spoke-dot" cx="17.73" cy="52.5" r="3"/>
-          <line class="spoke" x1="64" y1="37.65" x2="52.5" y2="17.73"/><circle class="spoke-dot" cx="52.5" cy="17.73" r="3"/>
-          <line class="spoke" x1="100" y1="28" x2="100" y2="5"/><circle class="spoke-dot" cx="100" cy="5" r="3"/>
-          <line class="spoke" x1="136" y1="37.65" x2="147.5" y2="17.73"/><circle class="spoke-dot" cx="147.5" cy="17.73" r="3"/>
-          <line class="spoke" x1="162.35" y1="64" x2="182.27" y2="52.5"/><circle class="spoke-dot" cx="182.27" cy="52.5" r="3"/>
-        </g>
-        <circle class="ring ring-1" cx="100" cy="100" r="72"/>
-        <circle class="ring ring-2" cx="100" cy="100" r="55"/>
-        <circle class="ring ring-3" cx="100" cy="100" r="38"/>
-        <circle class="core" cx="100" cy="100" r="13"/>
-      </svg>
-    </div>
-    <div class="welcome-pre">Bienvenido a</div>
-    <div class="welcome-main">MetriLab Gas</div>
-    <div class="welcome-tagline">Lectura instantánea y control total,<br>Automatización precisa y confiable.</div>
-    <div class="welcome-features">
-      <div class="feature-icon"><svg viewBox="0 0 24 24"><path d="M4 21V9l8-6 8 6v12h-6v-7h-4v7z"/></svg></div>
-      <div class="feature-icon"><svg viewBox="0 0 24 24"><rect x="5" y="3" width="14" height="18" rx="2"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="9" y1="12" x2="15" y2="12"/></svg></div>
-      <div class="feature-icon"><svg viewBox="0 0 24 24"><path d="M4 21V11l6-4 6 4v10M14 21v-6h4v6"/></svg></div>
-    </div>
-  </div>
-  <div class="welcome-bottom">
-    <button class="btn-glow" style="margin-bottom:0" onclick="mostrarLogin()">Iniciar sesión</button>
-  </div>
-</div>
-
-<div id="app" style="display:none">
-  <div class="topbar">
-    <div class="topbar-title">🌙 MetriLab <span style="font-size:11px;color:rgba(255,255,255,0.5);font-weight:normal;background:rgba(var(--accent-rgb),0.2);padding:3px 8px;border-radius:8px;margin-left:6px;vertical-align:middle">v1.5</span></div>
-    <div class="topbar-icons">
-      <button class="theme-toggle" id="theme-toggle" onclick="toggleTheme()">🌙</button>
-      <svg viewBox="0 0 24 24" onclick="showToast('Sin notificaciones nuevas')"><path d="M12 22c1.1 0 2-.9 2-2h-4c0 1.1.9 2 2 2zm6-6v-5c0-3.07-1.63-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5v.68C7.64 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2z"/></svg>
-      <svg viewBox="0 0 24 24" onclick="cerrarSesion()" style="cursor:pointer"><path d="M17 7l-1.41 1.41L18.17 11H8v2h10.17l-2.58 2.59L17 17l5-5zM4 5h8V3H4c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h8v-2H4V5z"/></svg>
-    </div>
+  <!-- Contenedor principal de tu aplicación -->
+  <div id="app-container">
+    <!-- Aquí va toda tu estructura HTML visual original -->
   </div>
 
-  <div class="toast" id="toast"></div>
-
-  <!-- INICIO -->
-  <div class="screen active" id="screen-inicio">
-    <div class="glass-card">
-      <div class="greeting-title" id="greeting">👋 Hola, Joseph</div>
-      <div class="greeting-sub" id="fecha-display">Cargando...</div>
-      <div class="progress-label">
-        <span>Progreso del día</span>
-        <span id="progreso-dia">0%</span>
-      </div>
-      <div class="progress-track">
-        <div class="progress-fill" id="progreso-dia-fill" style="width:0%"></div>
-      </div>
-    </div>
-
-    <div class="metrics-grid">
-      <div class="metric-card">
-        <svg class="metric-icon purple" viewBox="0 0 24 24" fill="currentColor"><path d="M20 8h-3V4H3c-1.1 0-2 .9-2 2v11h2c0 1.66 1.34 3 3 3s3-1.34 3-3h6c0 1.66 1.34 3 3 3s3-1.34 3-3h2v-5l-3-4z"/></svg>
-        <div class="metric-val" id="lotes-hoy">0</div>
-        <div class="metric-label">Lotes hoy</div>
-      </div>
-      <div class="metric-card cyan">
-        <svg class="metric-icon cyan" viewBox="0 0 24 24" fill="currentColor"><path d="M19.46 10c-.05 0-.09 0-.13.01-.06-.18-.13-.36-.21-.53l.04-.04c.27-.28.27-.72 0-1L18 7.27c-.28-.28-.72-.28-1 0l-.04.04c-.17-.08-.35-.15-.53-.21z"/></svg>
-        <div class="metric-val" id="medidores-hoy">0</div>
-        <div class="metric-label">Medidores</div>
-      </div>
-    </div>
-
-    <button class="btn-glow" onclick="goTo('registro')">
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="white"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm5 11h-4v4h-2v-4H7v-2h4V7h2v4h4v2z"/></svg>
-      NUEVO LOTE
-    </button>
-
-    <div class="glass-card">
-      <div class="section-title">📋 Lotes recientes</div>
-      <div id="lotes-recientes"></div>
-    </div>
-  </div>
-
-  <!-- REGISTRO -->
-  <div class="screen" id="screen-registro">
-    <div class="glass-card">
-      <div class="metric-label" style="margin-bottom:8px">Operario</div>
-      <select class="select-box" id="operario-select">
-        <option value="Joseph Erik Abanto Guerra">Joseph Erik Abanto Guerra</option>
-        <option value="Marco David Rodríguez Valencia">Marco David Rodríguez Valencia</option>
-      </select>
-      <div class="metric-label" style="margin-bottom:8px">Número de lote</div>
-      <input class="select-box" type="text" id="lote-manual-input" placeholder="Ej: L-2451" oninput="cambiarLoteManual(this.value)">
-      <div style="display:flex;justify-content:space-between;align-items:center">
-        <span style="font-size:12px;color:var(--text-secondary)" id="fecha-actual">--</span>
-      </div>
-    </div>
-
-    <div class="camera-box">
-      <svg viewBox="0 0 24 24"><path d="M12 15.2A3.2 3.2 0 0 1 8.8 12 3.2 3.2 0 0 1 12 8.8 3.2 3.2 0 0 1 15.2 12 3.2 3.2 0 0 1 12 15.2M20 4h-3.17L15 2H9L7.17 4H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2z"/></svg>
-      <p>Sube una foto del medidor</p>
-      <span>desde cámara o galería</span>
-      <div class="camera-buttons">
-        <button class="camera-btn primary" onclick="document.getElementById('file-camara').click()">📷 Cámara</button>
-        <button class="camera-btn outline" onclick="document.getElementById('file-galeria').click()">🖼️ Galería</button>
-      </div>
-      <input type="file" id="file-camara" accept="image/*" capture="environment" onchange="procesarFoto(this)">
-      <input type="file" id="file-galeria" accept="image/*" onchange="procesarFoto(this)">
-    </div>
-
-    <div class="glass-card-sm" style="margin-bottom:16px">
-      <div class="progress-label" style="margin-bottom:6px">
-        <span>Progreso del lote</span>
-        <span id="progreso-txt">0 / 12</span>
-      </div>
-      <div class="progress-track">
-        <div class="progress-fill" id="progress-fill" style="width:0%"></div>
-      </div>
-    </div>
-
-    <div id="warning-anomaly-container"></div>
-    <div id="resultado-actual"></div>
-
-    <div id="seccion-observaciones" style="display:none">
-      <div class="glass-card">
-        <div class="section-title">📋 Observaciones y registro final</div>
-        <p style="font-size:11px;color:var(--text-secondary);margin-bottom:12px">Completa observación, registro final y comentarios opcionales para cada medidor.</p>
-        <div id="lista-observaciones"></div>
-      </div>
-
-      <div class="confirm-card">
-        <label>
-          <input type="checkbox" id="confirmar-check" onchange="actualizarBotonFinalizar()">
-          <span id="confirmar-label">Confirmo la supervisión</span>
-        </label>
-      </div>
-
-      <button class="btn-secondary" id="btn-pendiente" onclick="guardarComoPendiente()" disabled>
-        ⏸️ Guardar como pendiente (completar después)
-      </button>
-
-      <button class="btn-glow" id="btn-finalizar" onclick="finalizarLote()" disabled style="height:55px">
-         Finalizar lote y descargar
-      </button>
-    </div>
-  </div>
-
-  <!-- PENDIENTES -->
-  <div class="screen" id="screen-pendientes">
-    <div class="section-title">⏳ Lotes pendientes</div>
-    <p style="font-size:11px;color:var(--text-secondary);margin-bottom:12px">Lotes con observaciones ya registradas, esperando su resultado final.</p>
-    <div id="pendientes-lista"></div>
-  </div>
-
-  <!-- HISTORIAL -->
-  <div class="screen" id="screen-historial">
-    <div class="section-title">📚 Historial de lotes</div>
-    <p style="font-size:11px;color:var(--text-secondary);margin-bottom:12px">Últimos 10 lotes disponibles offline.</p>
-    <div id="historial-lista"></div>
-  </div>
-
-  <!-- ADMIN -->
-  <div class="screen" id="screen-admin">
-    <div class="glass-card">
-      <div class="section-title">📊 Estadísticas generales</div>
-      <div class="metrics-grid" style="margin-bottom:0">
-        <div class="metric-card">
-          <div class="metric-val" id="admin-total-lotes">0</div>
-          <div class="metric-label">Total lotes</div>
-        </div>
-        <div class="metric-card cyan">
-          <div class="metric-val" id="admin-total-medidores">0</div>
-          <div class="metric-label">Total medidores</div>
-        </div>
-      </div>
-    </div>
-
-    <div class="glass-card">
-      <div class="section-title">👥 Operarios</div>
-      <div class="lote-row">
-        <div>
-          <div class="lote-title">Joseph E. Abanto</div>
-          <div class="lote-sub" id="admin-lotes-joseph">0 lotes</div>
-        </div>
-        <span class="badge">Activo</span>
-      </div>
-      <div class="lote-row">
-        <div>
-          <div class="lote-title">Marco D. Rodríguez</div>
-          <div class="lote-sub" id="admin-lotes-marco">0 lotes</div>
-        </div>
-        <span class="badge">Activo</span>
-      </div>
-    </div>
-
-    <div class="glass-card">
-      <div class="section-title">⚙️ Configuración API (3 claves con rotación automática)</div>
-      <p style="font-size:11px;color:var(--text-secondary);margin-bottom:10px">Si una clave falla, se prueba con la siguiente automáticamente.</p>
-      <input class="input-box" type="password" id="nueva-key-1" placeholder="Clave API 1 (principal)">
-      <input class="input-box" type="password" id="nueva-key-2" placeholder="Clave API 2 (respaldo)">
-      <input class="input-box" type="password" id="nueva-key-3" placeholder="Clave API 3 (respaldo)">
-      <button class="btn-secondary" onclick="cambiarClaves()">Actualizar claves</button>
-    </div>
-
-    <button class="btn-red" onclick="limpiarDatos()">🗑️ Eliminar todos los datos</button>
-  </div>
-
-  <nav class="bottom-nav">
-    <button class="tab active" id="tab-inicio" onclick="goTo('inicio')">
-      <div class="tab-icon"><svg viewBox="0 0 24 24"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></svg></div>
-      Inicio
-    </button>
-    <button class="tab" id="tab-registro" onclick="goTo('registro')">
-      <div class="tab-icon"><svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm5 11h-4v4h-2v-4H7v-2h4V7h2v4h4v2z"/></svg></div>
-      Registro
-    </button>
-    <button class="tab" id="tab-pendientes" onclick="goTo('pendientes')">
-      <div class="tab-icon" style="position:relative">
-        <svg viewBox="0 0 24 24"><path d="M12 20a8 8 0 1 0 0-16 8 8 0 0 0 0 16zm.5-13H11v6l5.2 3.2.8-1.3-4.5-2.7V7z"/></svg>
-        <span id="badge-pendientes" style="display:none;position:absolute;top:-2px;right:-2px;background:#f59e0b;color:#0A0A0F;font-size:9px;font-weight:700;min-width:16px;height:16px;border-radius:8px;align-items:center;justify-content:center;padding:0 3px">0</span>
-      </div>
-      Pendientes
-    </button>
-    <button class="tab" id="tab-historial" onclick="goTo('historial')">
-      <div class="tab-icon"><svg viewBox="0 0 24 24"><path d="M13 3a9 9 0 0 0-9 9H1l3.89 3.89.07.14L9 12H6c0-3.87 3.13-7 7-7s7 3.13 7 7-3.13 7-7 7c-1.93 0-3.68-.79-4.94-2.06l-1.42 1.42A8.954 8.954 0 0 0 13 21a9 9 0 0 0 0-18zm-1 5v5l4.28 2.54.72-1.21-3.5-2.08V8H12z"/></svg></div>
-      Historial
-    </button>
-    <button class="tab" id="tab-admin" onclick="goTo('admin')">
-      <div class="tab-icon"><svg viewBox="0 0 24 24"><path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4z"/></svg></div>
-      Admin
-    </button>
-  </nav>
-</div>
-
-<div id="jefe-panel" style="display:none">
-  <div class="topbar">
-    <div style="display:flex;align-items:center;gap:14px">
-      <img src="icon-jefe.png" alt="MetriLab" style="width:60px;height:60px;border-radius:14px;box-shadow:0 0 20px rgba(155,89,246,0.3)">
-      <div>
-        <div class="topbar-title">MetriLab · Panel del Jefe</div>
-        <div class="topbar-sub">Monitoreo en tiempo real</div>
-      </div>
-    </div>
-    <div class="topbar-right">
-      <a href="dashboard.html" class="nav-link">📊 Dashboard mensual</a>
-      <a class="nav-link" onclick="cerrarSesion()">🚪 Salir</a>
-      <div>
-        <span class="status-dot"></span>
-        <span class="status-text" id="jefe-status-text">Conectando...</span>
-      </div>
-    </div>
-  </div>
-
-  <div class="metrics-grid">
-    <div class="metric-card">
-      <div class="metric-val" id="jefe-total-lotes">0</div>
-      <div class="metric-label">Lotes totales</div>
-    </div>
-    <div class="metric-card cyan">
-      <div class="metric-val" id="jefe-total-medidores">0</div>
-      <div class="metric-label">Medidores</div>
-    </div>
-    <div class="metric-card green">
-      <div class="metric-val" id="jefe-lotes-hoy">0</div>
-      <div class="metric-label">Lotes hoy</div>
-    </div>
-  </div>
-
-  <div class="section-title">📋 Lotes por operario</div>
-
-  <div class="filter-bar" id="jefe-filter-bar">
-    <button class="filter-btn active" onclick="jefeFiltrar('todos')">Todos</button>
-    <button class="filter-btn" onclick="jefeFiltrar('Joseph')">Joseph</button>
-    <button class="filter-btn" onclick="jefeFiltrar('Marco')">Marco</button>
-  </div>
-
-  <div class="filter-bar" id="jefe-filter-bar-estado">
-    <button class="filter-btn" onclick="jefeFiltrarEstado('todos')">Todos los estados</button>
-    <button class="filter-btn active" onclick="jefeFiltrarEstado('activos')">✅ Activos</button>
-    <button class="filter-btn" id="jefe-btn-filtro-eliminados" onclick="jefeFiltrarEstado('eliminados')">❌ Eliminados</button>
-  </div>
-
-  <div id="jefe-lista-lotes">
-    <div class="loading">
-      <div class="spinner"></div>
-      <p style="font-size:13px;color:rgba(255,255,255,0.6)">Cargando lotes desde Firebase...</p>
-    </div>
-  </div>
-</div>
-
-<script>
-const OBSERVACIONES = [
-  "NINGUNA","PRESENCIA DE CORROSIÓN SOBRE MEDIDOR","PRESENCIA DE GOLPE SOBRE MEDIDOR",
-  "PRESENCIA DE CONTAMINANTE SOBRE MEDIDOR","PRESENCIA DE RAYADURA SOBRE MEDIDOR",
-  "ODÓMETRO SE DETIENE","ODÓMETRO NO GIRA","AUSENCIA DE PRECINTO DE SEGURIDAD",
-  "PRECINTO DE SEGURIDAD ROTO","PRESENCIA DE CONTAMINANTES SOBRE LUNETA",
-  "PRESENCIA DE FISURA SOBRE LUNETA","PRESENCIA DE RAYADURA SOBRE LUNETA",
-  "PRESENCIA DE CONTAMINANTE SOBRE ROSCA","PRESENCIA DE CORROSIÓN SOBRE ROSCA",
-  "PRESENCIA DE GOLPE SOBRE ROSCA","SELLOS DE SEGURIDAD DE ODÓMETRO ROTOS",
-  "AUSENCIA DE TORNILLOS DE SEGURIDAD"
-];
-
-const CAMPOS_REQUERIDOS = ['marca','modelo','serie_medidor','registro','unidad','volumen_ciclico','serie_precinto'];
-
-let loteActual = [];
-let fotosActual = [];
-let observacionesActual = [];
-let comentariosActual = [];
-let registrosFinalesActual = [];
-let tiemposProcesamiento = [];
-let siguienteSlot = 0;
-let historial = JSON.parse(localStorage.getItem('metrilab_historial') || '[]');
-let contadorLoteDia = JSON.parse(localStorage.getItem('metrilab_contador') || '{}');
-let lotesPendientes = JSON.parse(localStorage.getItem('metrilab_pendientes') || '[]');
-let loteEnEdicion = null;
-let loteFirebaseId = null;
-let loteCodigoAsignado = null;
-let loteManualIngresado = '';
-let creandoLotePromise = null;
-
-const MAX_HISTORIAL = 10;
-const TIEMPO_ESPERA_MIN = 80;
-
-const PROMPT = `Eres un experto en análisis de medidores de gas industriales. Analiza esta imagen con extremo detalle.
-
-Debes devolver EXCLUSIVAMENTE un objeto JSON con este esquema EXACTO, sin texto adicional:
-
-{
-  "marca": "string o null",
-  "modelo": "string o null",
-  "serie_medidor": "string o null",
-  "anio_medidor": "string o null",
-  "registro": "string o null",
-  "unidad": "string o null",
-  "volumen_ciclico": "string o null",
-  "serie_precinto": "string o null"
-}
-
-REGLAS DETALLADAS PARA CADA CAMPO:
-
-- marca: fabricante impreso en placa (ej: "METREX", "APOLO").
-- modelo: capacidad con punto decimal (ej: "G1.6", "G2.5"). Nunca G1,6 ni G16.
-- serie_medidor: número de serie del medidor sin letras.
-- anio_medidor: año de fabricación del medidor, 4 dígitos, impreso justo al lado o debajo del número de serie (ej: si el número de serie dice "0126896  2020", el año es "2020"). Es un año típicamente entre 2005 y el año actual.
-- registro: SOLAMENTE los 5 primeros dígitos del contador (los enteros que están ANTES de la coma). NO incluyas la coma ni los dígitos rojos. Ejemplos: si ves "00123,422" devuelve "00123". Si ves "00954,095" devuelve "00954". Si ves "016869,247" devuelve "01686".
-- unidad: unidad medida (siempre "m3").
-- volumen_ciclico: valor V (siempre "0.7 dm3").
-- serie_precinto: formato OBLIGATORIO G + 7 dígitos (ej: "G0454825"). Puede estar rotado en cualquier ángulo. Intenta leer rotando mentalmente si ves letras raras.
-
-EJEMPLO DE RESPUESTA CORRECTA (para un medidor que muestra "00123,422"):
-{"marca":"METREX","modelo":"G1.6","serie_medidor":"0087456","anio_medidor":"2021","registro":"00123","unidad":"m3","volumen_ciclico":"0.7 dm3","serie_precinto":"G0372098"}
-
-Si algún campo no es visible o legible, usa null. Devuelve SOLO el JSON, sin markdown, sin explicaciones.`;
-
-// TEMA
-function toggleTheme() {
-  const body = document.body;
-  const btn = document.getElementById('theme-toggle');
-  if (body.classList.contains('dark')) {
-    body.classList.remove('dark');
-    body.classList.add('light');
-    btn.textContent = '☀️';
-    localStorage.setItem('metrilab_theme', 'light');
-  } else {
-    body.classList.remove('light');
-    body.classList.add('dark');
-    btn.textContent = '🌙';
-    localStorage.setItem('metrilab_theme', 'dark');
-  }
-}
-
-function cargarTema() {
-  const tema = localStorage.getItem('metrilab_theme') || 'dark';
-  document.body.classList.remove('dark','light');
-  document.body.classList.add(tema);
-  const btn = document.getElementById('theme-toggle');
-  if (btn) btn.textContent = tema === 'dark' ? '🌙' : '☀️';
-}
-
-// BIENVENIDA -> LOGIN
-function mostrarLogin() {
-  document.getElementById('setup-screen').style.display = 'none';
-  document.getElementById('login-screen').style.display = 'flex';
-}
-
-function iniciarApp() {
-  document.getElementById('setup-screen').style.display = 'none';
-  document.getElementById('app').style.display = 'block';
-  cargarTema();
-  actualizarFecha();
-  actualizarInicio();
-  actualizarBadgePendientes();
-}
-
-function cambiarClaves() {
-  const key1 = document.getElementById('nueva-key-1').value.trim();
-  const key2 = document.getElementById('nueva-key-2').value.trim();
-  const key3 = document.getElementById('nueva-key-3').value.trim();
-  if (!key1 && !key2 && !key3) { showToast('Ingresa al menos una clave'); return; }
-  if (key1) localStorage.setItem('metrilab_key', key1);
-  if (key2) localStorage.setItem('metrilab_key_2', key2);
-  if (key3) localStorage.setItem('metrilab_key_3', key3);
-  document.getElementById('nueva-key-1').value = '';
-  document.getElementById('nueva-key-2').value = '';
-  document.getElementById('nueva-key-3').value = '';
-  showToast('Claves actualizadas correctamente');
-}
-
-// UTILIDADES
-function getFecha() {
-  return new Date().toLocaleString('es-PE', {timeZone:'America/Lima', hour12:false}).replace(',','');
-}
-
-function getFechaISO() {
-  return new Date().toLocaleString('en-CA', {timeZone:'America/Lima'}).split(',')[0];
-}
-
-function actualizarFecha() {
-  const d = new Date().toLocaleString('es-PE', {timeZone:'America/Lima', day:'numeric', month:'long', year:'numeric'});
-  document.getElementById('fecha-display').textContent = `Hoy es ${d}`;
-}
-
-function getLote() {
-  const fechaISO = getFechaISO();
-  if (!contadorLoteDia[fechaISO]) contadorLoteDia[fechaISO] = 0;
-  contadorLoteDia[fechaISO]++;
-  localStorage.setItem('metrilab_contador', JSON.stringify(contadorLoteDia));
-  return `QV${contadorLoteDia[fechaISO]}-VP-${fechaISO}`;
-}
-
-function getLoteSinIncrementar() {
-  const fechaISO = getFechaISO();
-  const num = (contadorLoteDia[fechaISO] || 0) + 1;
-  return `QV${num}-VP-${fechaISO}`;
-}
-
-function construirCodigoLote(numeroManual) {
-  const fechaISO = getFechaISO();
-  return `${numeroManual}-VP-${fechaISO}`;
-}
-
-function cambiarLoteManual(valor) {
-  loteManualIngresado = valor.trim();
-}
-
-function showToast(msg) {
-  const t = document.getElementById('toast');
-  t.textContent = msg;
-  t.classList.add('show');
-  setTimeout(() => t.classList.remove('show'), 2500);
-}
-
-function goTo(screen) {
-  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
-  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-  document.getElementById('screen-' + screen).classList.add('active');
-  document.getElementById('tab-' + screen).classList.add('active');
-  if (screen === 'inicio') actualizarInicio();
-  if (screen === 'historial') actualizarHistorial();
-  if (screen === 'admin') actualizarAdmin();
-  if (screen === 'registro') iniciarRegistro();
-  if (screen === 'pendientes') actualizarPendientes();
-}
-
-function iniciarRegistro() {
-  const inputLote = document.getElementById('lote-manual-input');
-  if (loteEnEdicion) {
-    inputLote.value = loteEnEdicion.lote;
-    inputLote.disabled = true;
-    document.getElementById('fecha-actual').textContent = loteEnEdicion.fecha.substring(0,10);
-  } else {
-    inputLote.disabled = false;
-    if (!loteFirebaseId) { inputLote.value = ''; loteManualIngresado = ''; }
-    document.getElementById('fecha-actual').textContent = getFecha().substring(0,10);
-  }
-  const op = document.getElementById('operario-select').value;
-  document.getElementById('confirmar-label').textContent = `Confirmo — ${op.split(' ')[0]} ${op.split(' ')[1]}`;
-}
-
-async function actualizarInicio() {
-  const fechaISO = getFechaISO();
-  const op = operarioActual || '';
-  document.getElementById('greeting').textContent = `👋 Hola, ${op.split(' ')[0]}`;
-
-  let lotesHoy = historial.filter(l => !l.eliminado && l.lote.includes(`-VP-${fechaISO}`));
-  let totalMed = lotesHoy.reduce((a,l) => a + l.medidores.length, 0);
-  let recientes = [...historial].filter(l => !l.eliminado).reverse().slice(0,5).map(l => ({
-    lote: l.lote, cantidadMedidores: l.medidores.length, operario: l.operario
-  }));
-  let fuenteFirebase = false;
-
-  if (typeof window.obtenerResumenDesdeFirebase === 'function') {
-    const resumen = await window.obtenerResumenDesdeFirebase(fechaISO);
-    if (resumen) {
-      lotesHoy = resumen.lotesHoy;
-      totalMed = lotesHoy.reduce((a,l) => a + (l.cantidadMedidores || 0), 0);
-      recientes = resumen.recientes.map(l => ({
-        lote: l.lote, cantidadMedidores: l.cantidadMedidores || 0, operario: l.operario || ''
-      }));
-      fuenteFirebase = true;
-    }
-  }
-
-  document.getElementById('lotes-hoy').textContent = lotesHoy.length;
-  document.getElementById('medidores-hoy').textContent = totalMed;
-
-  const meta = 48;
-  const pct = Math.min(Math.round((totalMed / meta) * 100), 100);
-  document.getElementById('progreso-dia').textContent = pct + '%';
-  document.getElementById('progreso-dia-fill').style.width = pct + '%';
-
-  const contenedor = document.getElementById('lotes-recientes');
-  if (recientes.length === 0) {
-    contenedor.innerHTML = `<div class="empty-state"><p>No hay lotes aún</p><span>El laboratorio espera...</span></div>`;
-    return;
-  }
-  contenedor.innerHTML = recientes.map(l => `
-    <div class="lote-row">
-      <div>
-        <div class="lote-title">${l.lote}</div>
-        <div class="lote-sub">${l.cantidadMedidores} medidores · ${(l.operario||'').split(' ')[0]}</div>
-      </div>
-      <span class="badge">${fuenteFirebase ? '☁️' : 'OK'}</span>
-    </div>`).join('');
-}
-
-function actualizarHistorial() {
-  const contenedor = document.getElementById('historial-lista');
-  if (historial.length === 0) {
-    contenedor.innerHTML = `<div class="empty-state"><p>No hay lotes registrados aún</p></div>`;
-    return;
-  }
-  contenedor.innerHTML = [...historial].reverse().map(l => `
-    <div class="glass-card" style="${l.eliminado ? 'opacity:0.55' : ''}">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-        <span style="font-size:14px;font-weight:600;color:var(--text-main)">${l.lote}</span>
-        <span class="badge" style="${l.eliminado ? 'background:rgba(220,38,38,0.15);color:#ef4444;border-color:rgba(220,38,38,0.3)' : ''}">${l.eliminado ? '❌ Eliminado' : '✓ OK'}</span>
-      </div>
-      <div style="font-size:12px;color:var(--text-secondary);margin-bottom:6px">${l.fecha} · ${l.operario}</div>
-      <div style="font-size:12px;color:var(--text-main)">${l.medidores.length} medidores registrados</div>
-      ${l.eliminado
-        ? `<div style="font-size:11px;color:#ef4444;background:rgba(220,38,38,0.08);border:1px solid rgba(220,38,38,0.2);border-radius:8px;padding:6px 10px;margin-top:8px">🗑️ Motivo: ${l.motivo || 'Sin especificar'}</div>`
-        : `<button class="btn-delete" style="margin-top:8px;width:100%;padding:8px" onclick="eliminarLoteHistorial('${l.lote}')">🗑️ Eliminar lote</button>`
-      }
-    </div>`).join('');
-}
-
-window.eliminarLoteHistorial = async function(loteCodigo) {
-  const item = historial.find(h => h.lote === loteCodigo);
-  if (!item || item.eliminado) return;
-  const motivo = prompt(`¿Por qué quieres eliminar el lote ${loteCodigo}?\n(Este motivo quedará registrado)`);
-  if (motivo === null) return;
-  if (!motivo.trim()) { showToast('Debes escribir un motivo'); return; }
-  item.eliminado = true;
-  item.motivo = motivo.trim();
-  localStorage.setItem('metrilab_historial', JSON.stringify(historial));
-  showToast('Lote marcado como eliminado');
-  actualizarHistorial();
-  if (item.firebaseId) {
-    const ok = await window.eliminarLoteEnFirebase(item.firebaseId, item.motivo);
-    if (!ok) showToast('⚠️ No se pudo avisar al panel del jefe');
-  } else {
-    showToast('⚠️ Este lote no se sincronizó con el panel del jefe');
-  }
-};
-
-function actualizarAdmin() {
-  const activos = historial.filter(l => !l.eliminado);
-  document.getElementById('admin-total-lotes').textContent = activos.length;
-  document.getElementById('admin-total-medidores').textContent = activos.reduce((a,l) => a + l.medidores.length, 0);
-  document.getElementById('admin-lotes-joseph').textContent = `${activos.filter(l=>l.operario.includes('Joseph')).length} lotes`;
-  document.getElementById('admin-lotes-marco').textContent = `${activos.filter(l=>l.operario.includes('Marco')).length} lotes`;
-}
-
-// OPTIMIZACIÓN DE IMAGEN
-async function redimensionarImagen(dataUrl, maxAncho = 1024) {
-  return new Promise((resolve) => {
-    const img = new Image();
-    img.onload = () => {
-      const scale = Math.min(maxAncho / img.width, 1);
-      const canvas = document.createElement('canvas');
-      canvas.width = img.width * scale;
-      canvas.height = img.height * scale;
-      const ctx = canvas.getContext('2d');
-      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-      resolve(canvas.toDataURL('image/jpeg', 0.85));
-    };
-    img.src = dataUrl;
-  });
-}
-
-// VALIDACIÓN
-function validarCampos(datos) {
-  const faltantes = [];
-  CAMPOS_REQUERIDOS.forEach(campo => {
-    if (!datos[campo] || datos[campo] === null || datos[campo] === '') {
-      // no incluir serie_precinto como faltante crítico (puede ser N/D)
-      if (campo !== 'serie_precinto') faltantes.push(campo);
-    }
-  });
-  return faltantes;
-}
-
-// DETECCIÓN DE ANOMALÍAS
-function detectarAnomalia() {
-  // Ya no se usa el tiempo de respuesta como señal de alerta:
-  // con procesamiento en paralelo, ser rápido ya no significa que se hizo mal.
-  return null;
-}
-
-// Crea el lote en Firebase si es la primera foto, o actualiza el medidor si ya existe
-async function sincronizarMedidorConFirebase(slot, datos) {
-  if (!loteFirebaseId) {
-    if (!creandoLotePromise) {
-      creandoLotePromise = (async () => {
-        const operario = document.getElementById('operario-select').value;
-        loteCodigoAsignado = loteEnEdicion ? loteEnEdicion.lote : construirCodigoLote(loteManualIngresado);
-        const fecha = getFecha();
-        return await window.crearLoteEnFirebase(loteCodigoAsignado, operario, fecha);
-      })();
-    }
-    loteFirebaseId = await creandoLotePromise;
-    if (!loteFirebaseId) { showToast('⚠️ No se pudo conectar con el panel del jefe'); return; }
-  }
-  await window.actualizarMedidorEnFirebase(loteFirebaseId, slot, {
-    serie_medidor: datos.serie_medidor || '',
-    anio: datos.anio_medidor || 'N/D',
-    registro: String(datos.registro || '0'),
-    unidad: 'm³',
-    serie_precinto: datos.serie_precinto || 'N/D',
-    estado: 'foto_tomada',
-    fecha_ultimo_cambio: new Date()
-  });
-}
-
-// PROCESAR FOTO (en paralelo, respetando el orden de captura)
-async function procesarFoto(input) {
-  if (!input.files[0]) return;
-  if (siguienteSlot === 0 && !loteEnEdicion && !loteManualIngresado) {
-    showToast('⚠️ Ingresa el número de lote antes de tomar la primera foto');
-    input.value = '';
-    return;
-  }
-  if (siguienteSlot >= 12) { showToast('Lote completo'); input.value = ''; return; }
-  const file = input.files[0];
-  input.value = ''; // libera la cámara de inmediato para la siguiente foto
-
-  const slot = siguienteSlot;
-  siguienteSlot++;
-
-  loteActual[slot] = { procesando: true };
-  fotosActual[slot] = null;
-  observacionesActual[slot] = "";
-  comentariosActual[slot] = "";
-  registrosFinalesActual[slot] = "";
-  tiemposProcesamiento[slot] = 0;
-  actualizarProgreso();
-  renderObservaciones();
-
-  const tiempoInicio = Date.now();
-  const reader = new FileReader();
-  reader.onload = async (e) => {
-    // Redimensionar
-    const imgOptimizada = await redimensionarImagen(e.target.result, 1024);
-    const base64 = imgOptimizada.split(',')[1];
-    const mime = 'image/jpeg';
-
-    // Las 3 claves rotan: cada foto usa una clave distinta para procesar en
-    // paralelo, y si esa falla, prueba con las otras dos antes de rendirse
-    const TODAS_CLAVES = [
-      localStorage.getItem('metrilab_key'),
-      localStorage.getItem('metrilab_key_2'),
-      localStorage.getItem('metrilab_key_3')
-    ].filter(k => k);
-    const inicio = slot % TODAS_CLAVES.length;
-    const CLAVES = [...TODAS_CLAVES.slice(inicio), ...TODAS_CLAVES.slice(0, inicio)];
+  <!-- SCRIPTS Y LÓGICA DE METRILAB -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.3.0/exceljs.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+
+  <script>
+    // ==========================================
+    // PROCESAMIENTO DE FOTOS CON GEMINI (CON PARSER SEGURO)
+    // ==========================================
+    async function procesarFoto(file, slot) {
+      const reader = new FileReader();
+      reader.onload = async function(e) {
+        const tiempoInicio = Date.now();
+        const imgOptimizada = await redimensionarImagen(e.target.result, 1024);
+        const base64 = imgOptimizada.split(',')[1];
+        const mime = 'image/jpeg';
+
+        // Las 3 claves rotan: cada foto usa una clave distinta para procesar en
+        // paralelo, y si esa falla, prueba con las otras dos antes de rendirse
+        const TODAS_CLAVES = [
+          localStorage.getItem('metrilab_key'),
+          localStorage.getItem('metrilab_key_2'),
+          localStorage.getItem('metrilab_key_3')
+        ].filter(k => k);
+        const inicio = slot % TODAS_CLAVES.length;
+        const CLAVES = [...TODAS_CLAVES.slice(inicio), ...TODAS_CLAVES.slice(0, inicio)];
 
         let datos = null;
-    let huboLimiteCuota = false;
+        let huboLimiteCuota = false;
 
-    async function intentarConClaves() {
-      for (const key of CLAVES) {
-        try {
-          const resp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${key}`, {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({contents:[{parts:[{text:PROMPT},{inline_data:{mime_type:mime,data:base64}}]}]})
-          });
-          if (resp.status === 429) {
-            console.error('Clave con cuota agotada (429), probando siguiente:', key.slice(0,15));
-            huboLimiteCuota = true;
-            continue;
+        async function intentarConClaves() {
+          for (const key of CLAVES) {
+            try {
+              const resp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${key}`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({contents:[{parts:[{text:PROMPT},{inline_data:{mime_type:mime,data:base64}}]}]})
+              });
+              if (resp.status === 429) {
+                console.error('Clave con cuota agotada (429), probando siguiente:', key.slice(0,15));
+                huboLimiteCuota = true;
+                continue;
+              }
+              const data = await resp.json();
+              if (data.error || !data.candidates || !data.candidates[0]?.content?.parts?.[0]?.text) { 
+                continue; 
+              } 
+              
+              // PARSER SEGURO Y ROBUSTO CON REGEX (Evita fallos si la IA responde con texto extra)
+              const textoCrudo = data.candidates[0].content.parts[0].text;
+              const matchJson = textoCrudo.match(/\{[\s\S]*\}/);
+              if (!matchJson) {
+                continue;
+              }
+              const textoLimpio = matchJson[0].trim();
+              return JSON.parse(textoLimpio);
+
+            } catch(err) {
+              console.error('Clave falló, probando siguiente:', err);
+              continue;
+            }
           }
-          const data = await resp.json();
-          if (data.error) { continue; } // Si hay error, prueba la siguiente clave
-          const texto = data.candidates[0].content.parts[0].text.replace(/```json|```/g,'').trim();
-          return JSON.parse(texto);
-        } catch(err) {
-          console.error('Clave falló, probando siguiente:', err);
-          continue;
+          return null;
         }
-      }
-      return null;
+
+        datos = await intentarConClaves();
+
+        // Si TODAS las claves dieron 429 (cuota agotada), espera 8 segundos y reintenta una vez más
+        if (!datos && huboLimiteCuota) {
+          showToast('⏳ Cuota de IA agotada, reintentando en unos segundos...');
+          await new Promise(r => setTimeout(r, 8000));
+          huboLimiteCuota = false;
+          datos = await intentarConClaves();
+        }
+
+        if (datos) {
+          // Rellenar defaults
+          if (!datos.marca) datos.marca = 'METREX';
+          if (!datos.modelo) datos.modelo = 'G1.6';
+          if (!datos.unidad) datos.unidad = 'm3';
+          if (!datos.volumen_ciclico) datos.volumen_ciclico = '0.7 dm3';
+          // Limpiar ceros a la izquierda del registro
+          if (datos.registro) {
+            datos.registro = datos.registro.replace(/^0+/, '') || '0';
+          }
+
+          loteActual[slot] = datos;
+          fotosActual[slot] = imgOptimizada;
+          tiemposProcesamiento[slot] = Date.now() - tiempoInicio;
+
+          sincronizarMedidorConFirebase(slot, datos);
+
+          // Alerta de anomalía
+          const anomalia = detectarAnomalia();
+          const contWarn = document.getElementById('warning-anomaly-container');
+          contWarn.innerHTML = anomalia ? `<div class="warning-anomaly">${anomalia}</div>` : '';
+
+          document.getElementById('seccion-observaciones').style.display = 'block';
+        } else {
+          loteActual[slot] = { error: true };
+          fotosActual[slot] = imgOptimizada;
+          document.getElementById('seccion-observaciones').style.display = 'block';
+        }
+        actualizarProgreso();
+        renderObservaciones();
+      };
+      reader.readAsDataURL(file);
     }
 
-    datos = await intentarConClaves();
+    // ==========================================
+    // RENDER OBSERVACIONES CON CAMPOS EXTRA
+    // ==========================================
+    function renderObservaciones() {
+      const cont = document.getElementById('lista-observaciones');
+      cont.innerHTML = loteActual.map((d, i) => {
+        if (!d || d.procesando) {
+          return `<div class="medidor-item"><div class="medidor-num">#${i+1}</div><div class="medidor-data">⏳ Analizando foto...</div></div>`;
+        }
+        if (d.error) {
+          return `<div class="medidor-item"><div style="display:flex;justify-content:space-between;align-items:center"><div class="medidor-num">#${i+1}</div><button class="btn-delete" onclick="eliminarMedidor(${i})">🗑️ Eliminar</button></div><div class="medidor-data" style="color:#fca5a5">⚠️ No se pudo leer. Elimina y vuelve a tomar la foto.</div></div>`;
+        }
+        const faltantes = validarCampos(d);
+        const regInicial = parseFloat((d.registro || '0').replace(',', '.'));
+        const regFinal = parseFloat((registrosFinalesActual[i] || '0').replace(',', '.'));
+        const diff = (!isNaN(regInicial) && !isNaN(regFinal) && registrosFinalesActual[i]) ? (regFinal - regInicial).toFixed(3).replace('.', ',') : null;
 
-    // Si TODAS las claves dieron 429 (cuota agotada), espera 8 segundos y reintenta una vez más
-    if (!datos && huboLimiteCuota) {
-      showToast('⏳ Cuota de IA agotada, reintentando en unos segundos...');
-      await new Promise(r => setTimeout(r, 8000));
-      huboLimiteCuota = false;
-      datos = await intentarConClaves();
+        let camposFaltantes = '';
+        if (faltantes.length > 0) {
+          camposFaltantes = faltantes.map(f => `
+            <div class="field-manual">
+              <label>Falta: ${f.replace('_',' ').toUpperCase()}</label>
+              <input type="text" placeholder="Ingresa manualmente" value="${d[f] || ''}" onchange="actualizarCampo(${i}, '${f}', this.value)">
+            </div>
+          `).join('');
+        }
+
+        return `
+        <div class="medidor-item">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;gap:8px">
+            <div class="medidor-num">#${i+1}</div>
+            <div style="display:flex;align-items:center;gap:6px;flex:1;justify-content:flex-end">
+              <span style="font-size:10px;color:var(--text-secondary)">Mover a:</span>
+              <input type="number" min="1" max="${loteActual.length}" value="${i+1}" style="width:44px;padding:6px;font-size:12px;background:var(--input-bg);border:1px solid var(--input-border);border-radius:6px;color:var(--text-main);text-align:center" onchange="moverMedidor(${i}, this.value)">
+              <button class="btn-delete" onclick="eliminarMedidor(${i})">🗑️</button>
+            </div>
+          </div>
+          <div class="medidor-data">Serie: ${d.serie_medidor || 'FALTA'} · Año: ${d.anio_medidor || 'N/D'} · Registro inicial: ${d.registro || 'FALTA'} ${d.unidad || ''}</div>
+          ${camposFaltantes}
+          <select class="medidor-select ${observacionesActual[i]?'':'empty'}" onchange="cambiarObservacion(${i}, this.value)">
+            <option value="">— Selecciona observación —</option>
+            ${OBSERVACIONES.map(o => `<option value="${o}" ${observacionesActual[i]===o?'selected':''}>${o}</option>`).join('')}
+          </select>
+          <div class="med-field">
+            <div class="med-field-item">
+              <label>Registro final (m³)</label>
+              <input type="text" class="${registrosFinalesActual[i]?'':'empty'}" placeholder="Ej: 00960,150" value="${registrosFinalesActual[i]||''}" onchange="cambiarRegistroFinal(${i}, this.value)">
+            </div>
+            <div class="med-field-item">
+              <label>Diferencia</label>
+              <input type="text" value="${diff !== null ? diff + ' m³' : '—'}" readonly style="background:rgba(46,139,87,0.1)">
+            </div>
+          </div>
+          ${diff !== null ? `<div class="med-diff">Volumen: ${diff} m³</div>` : ''}
+          <textarea class="textarea-box" placeholder="Comentarios adicionales (opcional)" onchange="cambiarComentario(${i}, this.value)">${comentariosActual[i]||''}</textarea>
+        </div>
+      `;
+      }).join('');
+      actualizarBotonFinalizar();
     }
 
-    if (datos) {
-      // Rellenar defaults
-      if (!datos.marca) datos.marca = 'METREX';
-      if (!datos.modelo) datos.modelo = 'G1.6';
-      if (!datos.unidad) datos.unidad = 'm3';
-      if (!datos.volumen_ciclico) datos.volumen_ciclico = '0.7 dm3';
-      // Limpiar ceros a la izquierda del registro
-      if (datos.registro) {
-        datos.registro = datos.registro.replace(/^0+/, '') || '0';
+    function actualizarCampo(idx, campo, valor) {
+      loteActual[idx][campo] = valor;
+      renderObservaciones();
+    }
+
+    function cambiarObservacion(idx, valor) {
+      observacionesActual[idx] = valor;
+      renderObservaciones();
+    }
+
+    function cambiarRegistroFinal(idx, valor) {
+      registrosFinalesActual[idx] = valor;
+      renderObservaciones();
+    }
+
+    function cambiarComentario(idx, valor) {
+      comentariosActual[idx] = valor;
+    }
+
+    function moverMedidor(idxActual, valorInput) {
+      const nuevaPos = parseInt(valorInput, 10) - 1;
+      const max = loteActual.length - 1;
+      if (isNaN(nuevaPos) || nuevaPos < 0 || nuevaPos > max || nuevaPos === idxActual) {
+        renderObservaciones();
+        return;
       }
+      function moverEnArray(arr) {
+        const [item] = arr.splice(idxActual, 1);
+        arr.splice(nuevaPos, 0, item);
+      }
+      moverEnArray(loteActual);
+      moverEnArray(fotosActual);
+      moverEnArray(observacionesActual);
+      moverEnArray(comentariosActual);
+      moverEnArray(registrosFinalesActual);
+      moverEnArray(tiemposProcesamiento);
+      renderObservaciones();
+      resincronizarOrdenConFirebase();
+    }
 
-      loteActual[slot] = datos;
-      fotosActual[slot] = imgOptimizada;
-      tiemposProcesamiento[slot] = Date.now() - tiempoInicio;
+    async function resincronizarOrdenConFirebase() {
+      if (!loteFirebaseId) return;
+      const nuevoMapa = {};
+      loteActual.forEach((d, i) => {
+        if (!d || d.procesando || d.error) return;
+        nuevoMapa[i] = {
+          serie_medidor: d.serie_medidor || '',
+          anio: d.anio_medidor || 'N/D',
+          registro: String(d.registro || '0'),
+          unidad: 'm³',
+          serie_precinto: d.serie_precinto || 'N/D',
+          estado: 'foto_tomada',
+          fecha_ultimo_cambio: new Date()
+        };
+      });
+      const ok = await window.reordenarMedidoresEnFirebase(loteFirebaseId, nuevoMapa);
+      if (!ok) showToast('⚠️ El reordenamiento no se sincronizó con el panel del jefe');
+    }
 
-      sincronizarMedidorConFirebase(slot, datos);
+    function eliminarMedidor(idx) {
+      if (loteActual.some(d => !d || d.procesando)) { showToast('Espera a que terminen de procesarse las fotos antes de eliminar'); return; }
+      if (!confirm(`¿Eliminar el medidor #${idx+1}?`)) return;
+      loteActual.splice(idx, 1);
+      fotosActual.splice(idx, 1);
+      observacionesActual.splice(idx, 1);
+      comentariosActual.splice(idx, 1);
+      registrosFinalesActual.splice(idx, 1);
+      tiemposProcesamiento.splice(idx, 1);
+      siguienteSlot--;
+      actualizarProgreso();
+      if (loteActual.length === 0) {
+        document.getElementById('resultado-actual').innerHTML = '';
+        document.getElementById('seccion-observaciones').style.display = 'none';
+        document.getElementById('warning-anomaly-container').innerHTML = '';
+      } else {
+        renderObservaciones();
+      }
+      showToast('Medidor eliminado');
+    }
 
-      // Alerta de anomalía
-      const anomalia = detectarAnomalia();
-      const contWarn = document.getElementById('warning-anomaly-container');
-      contWarn.innerHTML = anomalia ? `<div class="warning-anomaly">${anomalia}</div>` : '';
+    function actualizarBotonFinalizar() {
+      const obsLlenas = observacionesActual.length > 0 && observacionesActual.every(o => o !== "");
+      const regLlenos = registrosFinalesActual.length > 0 && registrosFinalesActual.every(r => r !== "");
+      const camposLlenos = loteActual.every(d => validarCampos(d).length === 0);
+      const confirmado = document.getElementById('confirmar-check')?.checked;
+      document.getElementById('btn-finalizar').disabled = !(obsLlenas && regLlenos && camposLlenos && confirmado);
+      const btnPendiente = document.getElementById('btn-pendiente');
+      if (btnPendiente) btnPendiente.disabled = !(obsLlenas && camposLlenos) || !!loteEnEdicion;
+    }
 
+    function actualizarProgreso() {
+      const n = loteActual.length;
+      document.getElementById('progreso-txt').textContent = `${n} / 12`;
+      document.getElementById('progress-fill').style.width = `${(n/12)*100}%`;
+    }
+
+    // ==========================================
+    // LOTES PENDIENTES (localStorage original)
+    // ==========================================
+    function guardarComoPendiente() {
+      if (loteActual.length === 0) { showToast('No hay medidores'); return; }
+      if (!observacionesActual.every(o => o !== "")) { showToast('Faltan observaciones'); return; }
+      if (loteEnEdicion) { showToast('Este lote ya estaba pendiente'); return; }
+
+      const operario = document.getElementById('operario-select').value;
+      const lote = loteCodigoAsignado || getLote();
+      const fecha = getFecha();
+
+      lotesPendientes.push({
+        lote, fecha, operario,
+        medidores: loteActual, fotos: fotosActual,
+        observaciones: observacionesActual, comentarios: comentariosActual,
+        horaInicio: Date.now(),
+        firebaseId: loteFirebaseId
+      });
+      localStorage.setItem('metrilab_pendientes', JSON.stringify(lotesPendientes));
+
+      loteActual = [];
+      fotosActual = [];
+      observacionesActual = [];
+      comentariosActual = [];
+      registrosFinalesActual = [];
+      tiemposProcesamiento = [];
+      siguienteSlot = 0;
+      loteFirebaseId = null;
+      loteCodigoAsignado = null;
+      creandoLotePromise = null;
+      document.getElementById('resultado-actual').innerHTML = '';
+      document.getElementById('warning-anomaly-container').innerHTML = '';
+      document.getElementById('lista-observaciones').innerHTML = '';
+      document.getElementById('seccion-observaciones').style.display = 'none';
+      document.getElementById('confirmar-check').checked = false;
+      document.getElementById('file-camara').value = '';
+      document.getElementById('file-galeria').value = '';
+      actualizarProgreso();
+      iniciarRegistro();
+      actualizarBadgePendientes();
+      showToast(`⏸️ Lote ${lote} guardado como pendiente. Complétalo cuando tengas los resultados finales.`);
+    }
+
+    function actualizarBadgePendientes() {
+      const listos = lotesPendientes.filter(p => (Date.now() - p.horaInicio) >= TIEMPO_ESPERA_MIN * 60000).length;
+      const badge = document.getElementById('badge-pendientes');
+      if (!badge) return;
+      if (listos > 0) {
+        badge.style.display = 'flex';
+        badge.textContent = listos;
+      } else {
+        badge.style.display = 'none';
+      }
+    }
+
+    function actualizarPendientes() {
+      const cont = document.getElementById('pendientes-lista');
+      if (lotesPendientes.length === 0) {
+        cont.innerHTML = `<div class="empty-state"><p>No hay lotes pendientes</p><span>Los lotes en espera de resultado final aparecerán aquí</span></div>`;
+        return;
+      }
+      cont.innerHTML = [...lotesPendientes].sort((a, b) => a.horaInicio - b.horaInicio).map((p) => {
+        const minutos = Math.floor((Date.now() - p.horaInicio) / 60000);
+        const listo = minutos >= TIEMPO_ESPERA_MIN;
+        return `
+        <div class="glass-card" style="${listo ? 'border-color:rgba(16,185,129,0.4)' : ''}">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+            <span style="font-size:14px;font-weight:600;color:var(--text-main)">${p.lote}</span>
+            <span class="badge" style="${listo ? 'background:rgba(16,185,129,0.15);color:#10b981;border-color:rgba(16,185,129,0.3)' : 'background:rgba(245,158,11,0.15);color:#f59e0b;border-color:rgba(245,158,11,0.3)'}">${listo ? '✅ Listo' : `⏳ ${minutos} min`}</span>
+          </div>
+          <div style="font-size:12px;color:var(--text-secondary);margin-bottom:10px">${p.fecha} · ${p.operario} · ${p.medidores.length} medidores</div>
+          <button class="btn-secondary" style="width:100%;margin-bottom:8px" onclick="completarPendiente('${p.lote}')">✏️ Completar resultado final</button>
+          <button class="btn-delete" style="width:100%;padding:8px" onclick="descartarPendiente('${p.lote}')">🗑️ Descartar</button>
+        </div>`;
+      }).join('');
+    }
+
+    function completarPendiente(loteCodigo) {
+      const idx = lotesPendientes.findIndex(p => p.lote === loteCodigo);
+      if (idx === -1) return;
+      const p = lotesPendientes[idx];
+
+      loteActual = p.medidores;
+      fotosActual = p.fotos;
+      observacionesActual = p.observaciones;
+      comentariosActual = p.comentarios;
+      registrosFinalesActual = p.medidores.map(() => "");
+      tiemposProcesamiento = [];
+      siguienteSlot = p.medidores.length;
+      loteEnEdicion = { lote: p.lote, fecha: p.fecha };
+      loteFirebaseId = p.firebaseId || null;
+      loteCodigoAsignado = p.lote;
+
+      lotesPendientes.splice(idx, 1);
+      localStorage.setItem('metrilab_pendientes', JSON.stringify(lotesPendientes));
+      actualizarBadgePendientes();
+
+      document.getElementById('operario-select').value = p.operario;
+      goTo('registro');
+      actualizarProgreso();
       document.getElementById('seccion-observaciones').style.display = 'block';
-    } else {
-      loteActual[slot] = { error: true };
-      fotosActual[slot] = imgOptimizada;
-      document.getElementById('seccion-observaciones').style.display = 'block';
-    }
-    actualizarProgreso();
-    renderObservaciones();
-  };
-  reader.readAsDataURL(file);
-}
-
-// RENDER OBSERVACIONES CON CAMPOS EXTRA
-function renderObservaciones() {
-  const cont = document.getElementById('lista-observaciones');
-  cont.innerHTML = loteActual.map((d, i) => {
-    if (!d || d.procesando) {
-      return `<div class="medidor-item"><div class="medidor-num">#${i+1}</div><div class="medidor-data">⏳ Analizando foto...</div></div>`;
-    }
-    if (d.error) {
-      return `<div class="medidor-item"><div style="display:flex;justify-content:space-between;align-items:center"><div class="medidor-num">#${i+1}</div><button class="btn-delete" onclick="eliminarMedidor(${i})">🗑️ Eliminar</button></div><div class="medidor-data" style="color:#fca5a5">⚠️ No se pudo leer. Elimina y vuelve a tomar la foto.</div></div>`;
-    }
-    const faltantes = validarCampos(d);
-    const regInicial = parseFloat((d.registro || '0').replace(',', '.'));
-    const regFinal = parseFloat((registrosFinalesActual[i] || '0').replace(',', '.'));
-    const diff = (!isNaN(regInicial) && !isNaN(regFinal) && registrosFinalesActual[i]) ? (regFinal - regInicial).toFixed(3).replace('.', ',') : null;
-
-    let camposFaltantes = '';
-    if (faltantes.length > 0) {
-      camposFaltantes = faltantes.map(f => `
-        <div class="field-manual">
-          <label>Falta: ${f.replace('_',' ').toUpperCase()}</label>
-          <input type="text" placeholder="Ingresa manualmente" value="${d[f] || ''}" onchange="actualizarCampo(${i}, '${f}', this.value)">
-        </div>
-      `).join('');
+      renderObservaciones();
+      showToast(`Completa el registro final del lote ${p.lote}`);
     }
 
-    return `
-    <div class="medidor-item">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;gap:8px">
-        <div class="medidor-num">#${i+1}</div>
-        <div style="display:flex;align-items:center;gap:6px;flex:1;justify-content:flex-end">
-          <span style="font-size:10px;color:var(--text-secondary)">Mover a:</span>
-          <input type="number" min="1" max="${loteActual.length}" value="${i+1}" style="width:44px;padding:6px;font-size:12px;background:var(--input-bg);border:1px solid var(--input-border);border-radius:6px;color:var(--text-main);text-align:center" onchange="moverMedidor(${i}, this.value)">
-          <button class="btn-delete" onclick="eliminarMedidor(${i})">🗑️</button>
-        </div>
-      </div>
-      <div class="medidor-data">Serie: ${d.serie_medidor || 'FALTA'} · Año: ${d.anio_medidor || 'N/D'} · Registro inicial: ${d.registro || 'FALTA'} ${d.unidad || ''}</div>
-      ${camposFaltantes}
-      <select class="medidor-select ${observacionesActual[i]?'':'empty'}" onchange="cambiarObservacion(${i}, this.value)">
-        <option value="">— Selecciona observación —</option>
-        ${OBSERVACIONES.map(o => `<option value="${o}" ${observacionesActual[i]===o?'selected':''}>${o}</option>`).join('')}
-      </select>
-      <div class="med-field">
-        <div class="med-field-item">
-          <label>Registro final (m³)</label>
-          <input type="text" class="${registrosFinalesActual[i]?'':'empty'}" placeholder="Ej: 00960,150" value="${registrosFinalesActual[i]||''}" onchange="cambiarRegistroFinal(${i}, this.value)">
-        </div>
-        <div class="med-field-item">
-          <label>Diferencia</label>
-          <input type="text" value="${diff !== null ? diff + ' m³' : '—'}" readonly style="background:rgba(46,139,87,0.1)">
-        </div>
-      </div>
-      ${diff !== null ? `<div class="med-diff">Volumen: ${diff} m³</div>` : ''}
-      <textarea class="textarea-box" placeholder="Comentarios adicionales (opcional)" onchange="cambiarComentario(${i}, this.value)">${comentariosActual[i]||''}</textarea>
-    </div>
-  `;
-  }).join('');
-  actualizarBotonFinalizar();
-}
-
-function actualizarCampo(idx, campo, valor) {
-  loteActual[idx][campo] = valor;
-  renderObservaciones();
-}
-
-function cambiarObservacion(idx, valor) {
-  observacionesActual[idx] = valor;
-  renderObservaciones();
-}
-
-function cambiarRegistroFinal(idx, valor) {
-  registrosFinalesActual[idx] = valor;
-  renderObservaciones();
-}
-
-function cambiarComentario(idx, valor) {
-  comentariosActual[idx] = valor;
-}
-
-function moverMedidor(idxActual, valorInput) {
-  const nuevaPos = parseInt(valorInput, 10) - 1;
-  const max = loteActual.length - 1;
-  if (isNaN(nuevaPos) || nuevaPos < 0 || nuevaPos > max || nuevaPos === idxActual) {
-    renderObservaciones();
-    return;
-  }
-  function moverEnArray(arr) {
-    const [item] = arr.splice(idxActual, 1);
-    arr.splice(nuevaPos, 0, item);
-  }
-  moverEnArray(loteActual);
-  moverEnArray(fotosActual);
-  moverEnArray(observacionesActual);
-  moverEnArray(comentariosActual);
-  moverEnArray(registrosFinalesActual);
-  moverEnArray(tiemposProcesamiento);
-  renderObservaciones();
-  resincronizarOrdenConFirebase();
-}
-
-async function resincronizarOrdenConFirebase() {
-  if (!loteFirebaseId) return;
-  const nuevoMapa = {};
-  loteActual.forEach((d, i) => {
-    if (!d || d.procesando || d.error) return;
-    nuevoMapa[i] = {
-      serie_medidor: d.serie_medidor || '',
-      anio: d.anio_medidor || 'N/D',
-      registro: String(d.registro || '0'),
-      unidad: 'm³',
-      serie_precinto: d.serie_precinto || 'N/D',
-      estado: 'foto_tomada',
-      fecha_ultimo_cambio: new Date()
-    };
-  });
-  const ok = await window.reordenarMedidoresEnFirebase(loteFirebaseId, nuevoMapa);
-  if (!ok) showToast('⚠️ El reordenamiento no se sincronizó con el panel del jefe');
-}
-
-function eliminarMedidor(idx) {
-  if (loteActual.some(d => !d || d.procesando)) { showToast('Espera a que terminen de procesarse las fotos antes de eliminar'); return; }
-  if (!confirm(`¿Eliminar el medidor #${idx+1}?`)) return;
-  loteActual.splice(idx, 1);
-  fotosActual.splice(idx, 1);
-  observacionesActual.splice(idx, 1);
-  comentariosActual.splice(idx, 1);
-  registrosFinalesActual.splice(idx, 1);
-  tiemposProcesamiento.splice(idx, 1);
-  siguienteSlot--;
-  actualizarProgreso();
-  if (loteActual.length === 0) {
-    document.getElementById('resultado-actual').innerHTML = '';
-    document.getElementById('seccion-observaciones').style.display = 'none';
-    document.getElementById('warning-anomaly-container').innerHTML = '';
-  } else {
-    renderObservaciones();
-  }
-  showToast('Medidor eliminado');
-}
-
-function actualizarBotonFinalizar() {
-  const obsLlenas = observacionesActual.length > 0 && observacionesActual.every(o => o !== "");
-  const regLlenos = registrosFinalesActual.length > 0 && registrosFinalesActual.every(r => r !== "");
-  const camposLlenos = loteActual.every(d => validarCampos(d).length === 0);
-  const confirmado = document.getElementById('confirmar-check')?.checked;
-  document.getElementById('btn-finalizar').disabled = !(obsLlenas && regLlenos && camposLlenos && confirmado);
-  const btnPendiente = document.getElementById('btn-pendiente');
-  if (btnPendiente) btnPendiente.disabled = !(obsLlenas && camposLlenos) || !!loteEnEdicion;
-}
-
-function actualizarProgreso() {
-  const n = loteActual.length;
-  document.getElementById('progreso-txt').textContent = `${n} / 12`;
-  document.getElementById('progress-fill').style.width = `${(n/12)*100}%`;
-}
-
-// LOTES PENDIENTES (esperando resultado final)
-function guardarComoPendiente() {
-  if (loteActual.length === 0) { showToast('No hay medidores'); return; }
-  if (!observacionesActual.every(o => o !== "")) { showToast('Faltan observaciones'); return; }
-  if (loteEnEdicion) { showToast('Este lote ya estaba pendiente'); return; }
-
-  const operario = document.getElementById('operario-select').value;
-  const lote = loteCodigoAsignado || getLote();
-  const fecha = getFecha();
-
-  lotesPendientes.push({
-    lote, fecha, operario,
-    medidores: loteActual, fotos: fotosActual,
-    observaciones: observacionesActual, comentarios: comentariosActual,
-    horaInicio: Date.now(),
-    firebaseId: loteFirebaseId
-  });
-  localStorage.setItem('metrilab_pendientes', JSON.stringify(lotesPendientes));
-
-  loteActual = [];
-  fotosActual = [];
-  observacionesActual = [];
-  comentariosActual = [];
-  registrosFinalesActual = [];
-  tiemposProcesamiento = [];
-  siguienteSlot = 0;
-  loteFirebaseId = null;
-  loteCodigoAsignado = null;
-  creandoLotePromise = null;
-  document.getElementById('resultado-actual').innerHTML = '';
-  document.getElementById('warning-anomaly-container').innerHTML = '';
-  document.getElementById('lista-observaciones').innerHTML = '';
-  document.getElementById('seccion-observaciones').style.display = 'none';
-  document.getElementById('confirmar-check').checked = false;
-  document.getElementById('file-camara').value = '';
-  document.getElementById('file-galeria').value = '';
-  actualizarProgreso();
-  iniciarRegistro();
-  actualizarBadgePendientes();
-  showToast(`⏸️ Lote ${lote} guardado como pendiente. Complétalo cuando tengas los resultados finales.`);
-}
-
-function actualizarBadgePendientes() {
-  const listos = lotesPendientes.filter(p => (Date.now() - p.horaInicio) >= TIEMPO_ESPERA_MIN * 60000).length;
-  const badge = document.getElementById('badge-pendientes');
-  if (!badge) return;
-  if (listos > 0) {
-    badge.style.display = 'flex';
-    badge.textContent = listos;
-  } else {
-    badge.style.display = 'none';
-  }
-}
-
-function actualizarPendientes() {
-  const cont = document.getElementById('pendientes-lista');
-  if (lotesPendientes.length === 0) {
-    cont.innerHTML = `<div class="empty-state"><p>No hay lotes pendientes</p><span>Los lotes en espera de resultado final aparecerán aquí</span></div>`;
-    return;
-  }
-  cont.innerHTML = [...lotesPendientes].sort((a, b) => a.horaInicio - b.horaInicio).map((p) => {
-    const minutos = Math.floor((Date.now() - p.horaInicio) / 60000);
-    const listo = minutos >= TIEMPO_ESPERA_MIN;
-    return `
-    <div class="glass-card" style="${listo ? 'border-color:rgba(16,185,129,0.4)' : ''}">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-        <span style="font-size:14px;font-weight:600;color:var(--text-main)">${p.lote}</span>
-        <span class="badge" style="${listo ? 'background:rgba(16,185,129,0.15);color:#10b981;border-color:rgba(16,185,129,0.3)' : 'background:rgba(245,158,11,0.15);color:#f59e0b;border-color:rgba(245,158,11,0.3)'}">${listo ? '✅ Listo' : `⏳ ${minutos} min`}</span>
-      </div>
-      <div style="font-size:12px;color:var(--text-secondary);margin-bottom:10px">${p.fecha} · ${p.operario} · ${p.medidores.length} medidores</div>
-      <button class="btn-secondary" style="width:100%;margin-bottom:8px" onclick="completarPendiente('${p.lote}')">✏️ Completar resultado final</button>
-      <button class="btn-delete" style="width:100%;padding:8px" onclick="descartarPendiente('${p.lote}')">🗑️ Descartar</button>
-    </div>`;
-  }).join('');
-}
-
-function completarPendiente(loteCodigo) {
-  const idx = lotesPendientes.findIndex(p => p.lote === loteCodigo);
-  if (idx === -1) return;
-  const p = lotesPendientes[idx];
-
-  loteActual = p.medidores;
-  fotosActual = p.fotos;
-  observacionesActual = p.observaciones;
-  comentariosActual = p.comentarios;
-  registrosFinalesActual = p.medidores.map(() => "");
-  tiemposProcesamiento = [];
-  siguienteSlot = p.medidores.length;
-  loteEnEdicion = { lote: p.lote, fecha: p.fecha };
-  loteFirebaseId = p.firebaseId || null;
-  loteCodigoAsignado = p.lote;
-
-  lotesPendientes.splice(idx, 1);
-  localStorage.setItem('metrilab_pendientes', JSON.stringify(lotesPendientes));
-  actualizarBadgePendientes();
-
-  document.getElementById('operario-select').value = p.operario;
-  goTo('registro');
-  actualizarProgreso();
-  document.getElementById('seccion-observaciones').style.display = 'block';
-  renderObservaciones();
-  showToast(`Completa el registro final del lote ${p.lote}`);
-}
-
-function descartarPendiente(loteCodigo) {
-  if (!confirm(`¿Descartar el lote pendiente ${loteCodigo}? Esta acción no se puede deshacer.`)) return;
-  lotesPendientes = lotesPendientes.filter(p => p.lote !== loteCodigo);
-  localStorage.setItem('metrilab_pendientes', JSON.stringify(lotesPendientes));
-  actualizarBadgePendientes();
-  actualizarPendientes();
-  showToast('Lote pendiente descartado');
-}
-
-async function finalizarLote() {
-  if (loteActual.length === 0) { showToast('No hay medidores'); return; }
-  if (!observacionesActual.every(o => o !== "")) { showToast('Faltan observaciones'); return; }
-  if (!registrosFinalesActual.every(r => r !== "")) { showToast('Faltan registros finales'); return; }
-  if (!document.getElementById('confirmar-check').checked) { showToast('Confirma la supervisión'); return; }
-  if (typeof window.guardarLoteEnFirebase !== 'function') {
-    showToast('⚠️ Aún está cargando la conexión con el panel del jefe. Espera 2-3 segundos e inténtalo de nuevo.');
-    return;
-  }
-
-  const operario = document.getElementById('operario-select').value;
-  const lote = loteEnEdicion ? loteEnEdicion.lote : (loteCodigoAsignado || getLote());
-  const fecha = loteEnEdicion ? loteEnEdicion.fecha : getFecha();
-
-  const datosLote = loteActual;
-  const datosFotos = fotosActual;
-  const datosObservaciones = observacionesActual;
-  const datosComentarios = comentariosActual;
-  const datosRegistrosFinales = registrosFinalesActual;
-
-  showToast('☁️ Sincronizando con el panel del jefe...');
-  let firebaseId = loteFirebaseId;
-  try {
-    if (firebaseId) {
-      await window.finalizarLoteEnFirebase(firebaseId, datosObservaciones, datosRegistrosFinales, datosLote);
-    } else {
-      firebaseId = await window.guardarLoteEnFirebase(lote, operario, fecha, datosLote, datosObservaciones, datosRegistrosFinales);
+    function descartarPendiente(loteCodigo) {
+      if (!confirm(`¿Descartar el lote pendiente ${loteCodigo}? Esta acción no se puede deshacer.`)) return;
+      lotesPendientes = lotesPendientes.filter(p => p.lote !== loteCodigo);
+      localStorage.setItem('metrilab_pendientes', JSON.stringify(lotesPendientes));
+      actualizarBadgePendientes();
+      actualizarPendientes();
+      showToast('Lote pendiente descartado');
     }
-  } catch (e) {
-    console.error('Error inesperado sincronizando con Firebase:', e);
-  }
-  if (!firebaseId) {
-    showToast('⚠️ No se pudo sincronizar con el panel del jefe, pero el reporte se generará igual');
-  }
 
-  const nuevoLote = {lote, fecha, operario, medidores: datosLote, observaciones: datosObservaciones, comentarios: datosComentarios, registrosFinales: datosRegistrosFinales, firebaseId: firebaseId || null, eliminado: false, motivo: null};
-  historial.push(nuevoLote);
-  if (historial.length > MAX_HISTORIAL) historial = historial.slice(-MAX_HISTORIAL);
-  localStorage.setItem('metrilab_historial', JSON.stringify(historial));
-
-  showToast('✨ Generando reporte...');
-  await generarZIP(datosLote, datosFotos, datosObservaciones, datosComentarios, datosRegistrosFinales, operario, fecha, lote);
-
-  loteActual = [];
-  fotosActual = [];
-  observacionesActual = [];
-  comentariosActual = [];
-  registrosFinalesActual = [];
-  tiemposProcesamiento = [];
-  siguienteSlot = 0;
-  loteEnEdicion = null;
-  loteFirebaseId = null;
-  loteCodigoAsignado = null;
-  creandoLotePromise = null;
-  document.getElementById('resultado-actual').innerHTML = '';
-  document.getElementById('warning-anomaly-container').innerHTML = '';
-  document.getElementById('lista-observaciones').innerHTML = '';
-  document.getElementById('seccion-observaciones').style.display = 'none';
-  document.getElementById('confirmar-check').checked = false;
-  document.getElementById('file-camara').value = '';
-  document.getElementById('file-galeria').value = '';
-  actualizarProgreso();
-  iniciarRegistro();
-  showToast('✅ Lote finalizado y datos limpiados');
-}
-
-// GENERAR EXCEL + ZIP
-async function generarZIP(datos, fotos, observaciones, comentarios, registrosFinales, operario, fecha, lote) {
-  const wb = new ExcelJS.Workbook();
-  const ws = wb.addWorksheet('Registro');
-
-  const AZUL = '17375E', AZUL_CLARO = 'D9EAF7', VERDE = '2E8B57', VERDE_CLARO = 'EAF7EE';
-  const ROJO = 'C0392B', GRIS = 'F4F6F7', BLANCO = 'FFFFFF', AMARILLO = 'FCF3CF';
-  const AZUL_LINK = '1E40AF';
-
-  const borde = {top:{style:'thin'}, left:{style:'thin'}, bottom:{style:'thin'}, right:{style:'thin'}};
-  const bordeMedio = {top:{style:'medium'}, left:{style:'medium'}, bottom:{style:'medium'}, right:{style:'medium'}};
-
-  const total = datos.length;
-  const anchos = [5, 10, 10, 16, 10, 11, 10, 10, 16, 16, 16, 12, 10, 25, 5, 14, 5, 12, 8, 2.11];
-  anchos.forEach((a, i) => { ws.getColumn(i+1).width = a; });
-
-  function aplicar(celda, valor, opts={}) {
-    const c = ws.getCell(celda);
-    c.value = valor;
-    c.font = {bold:opts.negrita||false, size:opts.tam||10, color:{argb:'FF'+(opts.color_texto||'000000')}, italic:opts.italica||false};
-    c.alignment = {horizontal:opts.alineacion||'center', vertical:'middle', wrapText:opts.wrap!==false};
-    if (opts.color_fondo) c.fill = {type:'pattern', pattern:'solid', fgColor:{argb:'FF'+opts.color_fondo}};
-    c.border = opts.borde || borde;
-  }
-
- ws.mergeCells('A1:T1');
-  aplicar('A1', 'LABORATORIO DE MEDIDORES DE GAS', {negrita:true, tam:18, color_texto:BLANCO, color_fondo:AZUL, borde:bordeMedio});
-  ws.getRow(1).height = 35;
-  ws.mergeCells('A2:T2');
-  aplicar('A2', 'Reporte automático de inspección y registro de medidores', {tam:10, italica:true, color_texto:'404040', color_fondo:GRIS});
-  ws.getRow(2).height = 18;
-  ws.mergeCells('A3:D3');
-  aplicar('A3', `👤 Operario: ${operario}`, {negrita:true, color_fondo:AZUL_CLARO, alineacion:'left'});
-  ws.mergeCells('E3:M3');
-  aplicar('E3', `📅 Fecha: ${fecha}`, {negrita:true, color_fondo:AZUL_CLARO});
-  ws.mergeCells('N3:T3');
-  aplicar('N3', `🏷 Lote: ${lote}`, {negrita:true, color_texto:BLANCO, color_fondo:AZUL});
-  ws.getRow(3).height = 22;
-  ws.getRow(4).height = 6;
-
-  const marcaT = datos[0]?.marca || 'METREX';
-  const modeloT = datos[0]?.modelo || 'G1.6';
-  const tarjetas = [
-    ['A5:E6', 'TOTAL DE\nMEDIDORES', String(total), AZUL_CLARO],
-    ['F5:J6', 'MARCA DEL\nLOTE', marcaT, VERDE_CLARO],
-    ['K5:N6', 'MODELO', modeloT, 'F4ECF7'],
-    ['O5:S6', 'ESTADO DEL\nLOTE', 'APROBADO', VERDE_CLARO]
-  ];
-  const AZUL_OSCURO_TARJETA = '17375E';
-  tarjetas.forEach(([rango, titulo, valor, color]) => {
-    ws.mergeCells(rango);
-    aplicar(rango.split(':')[0], `${titulo}\n${valor}`, {negrita:true, tam:11, color_texto:'FFFFFF', color_fondo:AZUL_OSCURO_TARJETA, borde:bordeMedio});
-  });
-  ws.getRow(5).height = 28;
-  ws.getRow(6).height = 28;
-  ws.getRow(7).height = 6;
-
-  ws.mergeCells('A8:N8');
-  aplicar('A8', 'RESUMEN DE MEDIDORES DEL LOTE', {negrita:true, tam:11, color_texto:BLANCO, color_fondo:AZUL});
-  ws.getRow(8).height = 22;
-
-  const cols = ['#','Marca','Modelo','Nro. Serie Medidor','Año','Vol. Cíclico','Tipo','Color','Nro. Serie Precinto','Registro Inicial (m³)','Registro Final (m³)','Diferencia (m³)','Foto','Observación'];
-  cols.forEach((h, i) => {
-    aplicar(ws.getCell(9, i+1).address, h, {negrita:true, tam:9, color_texto:BLANCO, color_fondo:ROJO});
-  });
-  ws.getRow(9).height = 26.4;
-
-  const nombresImagenes = datos.map((d, i) => `${String(i+1).padStart(2,'0')}_${d.serie_medidor}.png`);
-
-  datos.forEach((d, i) => {
-    const fila = 10 + i;
-    const colorFila = i % 2 === 0 ? GRIS : BLANCO;
-    const obs = observaciones[i] || 'NINGUNA';
-
-    // Calcular diferencia
-    const regIni = parseFloat((d.registro || '0').replace(',', '.'));
-    const regFin = parseFloat((registrosFinales[i] || '0').replace(',', '.'));
-    const diff = (!isNaN(regIni) && !isNaN(regFin) && registrosFinales[i]) ? (regFin - regIni).toFixed(3).replace('.', ',') : 'N/D';
-
-    const valores = [
-      i+1, d.marca||'METREX', d.modelo||'G1.6', d.serie_medidor, d.anio_medidor || 'N/D',
-      '0.7 dm³', 'Circular', 'Verde', d.serie_precinto || 'N/D',
-      `${d.registro} m³`, `${registrosFinales[i]} m³`, `${diff} m³`, '', obs
-    ];
-    valores.forEach((v, j) => {
-      const col = j + 1;
-      let fondo = colorFila;
-      if (col === 14 && obs !== 'NINGUNA') fondo = 'FDEDEC';
-      if (col === 12) fondo = 'D5F5E3';
-      aplicar(ws.getCell(fila, col).address, v, {tam:9, color_fondo:fondo});
-      if (col === 14) ws.getCell(fila, col).alignment = {horizontal:'center', vertical:'middle', wrapText:false};
-    });
-    const cLink = ws.getCell(fila, 13);
-    cLink.value = {text: `📷 Ver foto ${i+1}`, hyperlink: `imagenes/${nombresImagenes[i]}`};
-    cLink.font = {bold:true, size:9, color:{argb:'FF'+AZUL_LINK}, underline:true};
-    cLink.alignment = {horizontal:'center', vertical:'middle'};
-    cLink.fill = {type:'pattern', pattern:'solid', fgColor:{argb:'FF'+VERDE_CLARO}};
-    cLink.border = borde;
-    ws.getRow(fila).height = 16;
-  });
-
-  // COMENTARIOS (si existen)
-  const filaComentariosInicio = 10 + total + 2;
-  const tieneComentarios = comentarios.some(c => c && c.trim() !== '');
-  if (tieneComentarios) {
-    ws.mergeCells(`A${filaComentariosInicio}:N${filaComentariosInicio}`);
-    aplicar(`A${filaComentariosInicio}`, 'COMENTARIOS ADICIONALES', {negrita:true, tam:11, color_texto:BLANCO, color_fondo:VERDE});
-    ws.getRow(filaComentariosInicio).height = 22;
-
-    let f = filaComentariosInicio + 1;
-    comentarios.forEach((c, i) => {
-      if (c && c.trim() !== '') {
-        ws.mergeCells(`A${f}:B${f}`);
-        aplicar(`A${f}`, `#${i+1} (Serie ${datos[i].serie_medidor})`, {negrita:true, tam:9, color_fondo:AZUL_CLARO, alineacion:'left'});
-        ws.mergeCells(`C${f}:N${f}`);
-        aplicar(`C${f}`, c, {tam:9, color_fondo:BLANCO, alineacion:'left'});
-        ws.getRow(f).height = 18;
-        f++;
+    async function finalizarLote() {
+      if (loteActual.length === 0) { showToast('No hay medidores'); return; }
+      if (!observacionesActual.every(o => o !== "")) { showToast('Faltan observaciones'); return; }
+      if (!registrosFinalesActual.every(r => r !== "")) { showToast('Faltan registros finales'); return; }
+      if (!document.getElementById('confirmar-check').checked) { showToast('Confirma la supervisión'); return; }
+      if (typeof window.guardarLoteEnFirebase !== 'function') {
+        showToast('⚠️ Aún está cargando la conexión con el panel del jefe. Espera 2-3 segundos e inténtalo de nuevo.');
+        return;
       }
-    });
-  }
 
-  // PANEL DETALLES
-  ws.mergeCells('O8:T8');
-  aplicar('O8', 'DETALLES DEL LOTE', {negrita:true, tam:11, color_texto:BLANCO, color_fondo:AZUL});
+      const operario = document.getElementById('operario-select').value;
+      const lote = loteEnEdicion ? loteEnEdicion.lote : (loteCodigoAsignado || getLote());
+      const fecha = loteEnEdicion ? loteEnEdicion.fecha : getFecha();
 
-  const detalles = [
-    ['Lote:', lote], ['Fecha y hora:', fecha], ['Operario:', operario],
-    ['Marca:', marcaT], ['Modelo:', modeloT], ['Tipo:', 'Circular'],
-    ['Vol. Cíclico:', '0.7 dm³ (fijo)'], ['Color:', 'Verde'],
-    ['Total medidores:', String(total)], ['Supervisados:', `${total} (100%)`]
-  ];
-  detalles.forEach(([k, v], i) => {
-    const f = 9 + i;
-    ws.mergeCells(`O${f}:P${f}`);
-    aplicar(`O${f}`, k, {negrita:true, tam:8, color_fondo:AZUL_CLARO, alineacion:'left'});
-    ws.mergeCells(`Q${f}:T${f}`);
-    aplicar(`Q${f}`, v, {tam:8, color_fondo:BLANCO, alineacion:'left'});
-    ws.getRow(f).height = 16;
-  });
+      const datosLote = loteActual;
+      const datosFotos = fotosActual;
+      const datosObservaciones = observacionesActual;
+      const datosComentarios = comentariosActual;
+      const datosRegistrosFinales = registrosFinalesActual;
 
-  const certFila = 9 + detalles.length + 1;
-  ws.mergeCells(`O${certFila}:T${certFila+2}`);
-  aplicar(`O${certFila}`, `Certifico que el proceso fue supervisado correctamente\n— ${operario} —\n${fecha}`, {negrita:true, italica:true, tam:8, color_fondo:VERDE_CLARO, borde:bordeMedio});
-  ws.getRow(certFila).height = 18;
-  ws.getRow(certFila+1).height = 18;
-  ws.getRow(certFila+2).height = 18;
+      showToast('☁️ Sincronizando con el panel del jefe...');
+      let firebaseId = loteFirebaseId;
+      try {
+        if (firebaseId) {
+          await window.finalizarLoteEnFirebase(firebaseId, datosObservaciones, datosRegistrosFinales, datosLote);
+        } else {
+          firebaseId = await window.guardarLoteEnFirebase(lote, operario, fecha, datosLote, datosObservaciones, datosRegistrosFinales);
+        }
+      } catch (e) {
+        console.error('Error inesperado sincronizando con Firebase:', e);
+      }
+      if (!firebaseId) {
+        showToast('⚠️ No se pudo sincronizar con el panel del jefe, pero el reporte se generará igual');
+      }
 
-  const estFila = certFila + 4;
-  ws.mergeCells(`O${estFila}:T${estFila}`);
-  aplicar(`O${estFila}`, 'RESUMEN DE OBSERVACIONES', {negrita:true, tam:10, color_texto:BLANCO, color_fondo:VERDE});
-  ws.getRow(estFila).height = 20;
+      const nuevoLote = {lote, fecha, operario, medidores: datosLote, observaciones: datosObservaciones, comentarios: datosComentarios, registrosFinales: datosRegistrosFinales, firebaseId: firebaseId || null, eliminado: false, motivo: null};
+      historial.push(nuevoLote);
+      if (historial.length > MAX_HISTORIAL) historial = historial.slice(-MAX_HISTORIAL);
+      localStorage.setItem('metrilab_historial', JSON.stringify(historial));
 
-  const sinObs = observaciones.filter(o => o === 'NINGUNA').length;
-  const conObs = total - sinObs;
-  const stats = [['Sin observación', sinObs, VERDE_CLARO], ['Con observación', conObs, AMARILLO]];
-  stats.forEach(([n, v, c], i) => {
-    const fr = estFila + 1 + i;
-    ws.mergeCells(`O${fr}:Q${fr}`);
-    aplicar(`O${fr}`, n, {tam:9, color_fondo:c});
-    ws.mergeCells(`R${fr}:T${fr}`);
-    aplicar(`R${fr}`, `${v} (${total ? Math.round(v/total*100) : 0}%)`, {negrita:true, tam:9, color_fondo:c});
-    ws.getRow(fr).height = 16;
-  });
+      showToast('✨ Generando reporte...');
+      await generarZIP(datosLote, datosFotos, datosObservaciones, datosComentarios, datosRegistrosFinales, operario, fecha, lote);
 
-  const excelBuffer = await wb.xlsx.writeBuffer();
-  const zip = new JSZip();
-  zip.file(`Reporte_${lote}.xlsx`, excelBuffer);
-  const imgFolder = zip.folder("imagenes");
-  for (let i = 0; i < fotos.length; i++) {
-    const base64 = fotos[i].split(',')[1];
-    imgFolder.file(nombresImagenes[i], base64, {base64: true});
-  }
-  const blob = await zip.generateAsync({type:'blob'});
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `MetriLab_${lote}.zip`;
-  a.click();
-}
+      loteActual = [];
+      fotosActual = [];
+      observacionesActual = [];
+      comentariosActual = [];
+      registrosFinalesActual = [];
+      tiemposProcesamiento = [];
+      siguienteSlot = 0;
+      loteEnEdicion = null;
+      loteFirebaseId = null;
+      loteCodigoAsignado = null;
+      creandoLotePromise = null;
+      document.getElementById('resultado-actual').innerHTML = '';
+      document.getElementById('warning-anomaly-container').innerHTML = '';
+      document.getElementById('lista-observaciones').innerHTML = '';
+      document.getElementById('seccion-observaciones').style.display = 'none';
+      document.getElementById('confirmar-check').checked = false;
+      document.getElementById('file-camara').value = '';
+      document.getElementById('file-galeria').value = '';
+      actualizarProgreso();
+      iniciarRegistro();
+      showToast('✅ Lote finalizado y datos limpiados');
+    }
 
-function limpiarDatos() {
-  if (confirm('¿Eliminar todos los datos?')) {
-    historial = [];
-    contadorLoteDia = {};
-    lotesPendientes = [];
-    localStorage.removeItem('metrilab_historial');
-    localStorage.removeItem('metrilab_contador');
-    localStorage.removeItem('metrilab_pendientes');
-    actualizarAdmin();
-    actualizarBadgePendientes();
-    showToast('Datos eliminados');
-  }
-}
+    // ==========================================
+    // GENERAR EXCEL + ZIP
+    // ==========================================
+    async function generarZIP(datos, fotos, observaciones, comentarios, registrosFinales, operario, fecha, lote) {
+      const wb = new ExcelJS.Workbook();
+      const ws = wb.addWorksheet('Registro');
 
-// iniciarApp() ya no se llama aquí directamente: la dispara el login
-// (ver onAuthStateChanged / entrarAlApp en el bloque de Firebase, al inicio del archivo)
-</script>
+      const AZUL = '17375E', AZUL_CLARO = 'D9EAF7', VERDE = '2E8B57', VERDE_CLARO = 'EAF7EE';
+      const ROJO = 'C0392B', GRIS = 'F4F6F7', BLANCO = 'FFFFFF', AMARILLO = 'FCF3CF';
+      const AZUL_LINK = '1E40AF';
+
+      const borde = {top:{style:'thin'}, left:{style:'thin'}, bottom:{style:'thin'}, right:{style:'thin'}};
+      const bordeMedio = {top:{style:'medium'}, left:{style:'medium'}, bottom:{style:'medium'}, right:{style:'medium'}};
+
+      const total = datos.length;
+      const anchos = [5, 10, 10, 16, 10, 11, 10, 10, 16, 16, 16, 12, 10, 25, 5, 14, 5, 12, 8, 2.11];
+      anchos.forEach((a, i) => { ws.getColumn(i+1).width = a; });
+
+      function aplicar(celda, valor, opts={}) {
+        const c = ws.getCell(celda);
+        c.value = valor;
+        c.font = {bold:opts.negrita||false, size:opts.tam||10, color:{argb:'FF'+(opts.color_texto||'000000')}, italic:opts.italica||false};
+        c.alignment = {horizontal:opts.alineacion||'center', vertical:'middle', wrapText:opts.wrap!==false};
+        if (opts.color_fondo) c.fill = {type:'pattern', pattern:'solid', fgColor:{argb:'FF'+opts.color_fondo}};
+        c.border = opts.borde || borde;
+      }
+
+      ws.mergeCells('A1:T1');
+      aplicar('A1', 'LABORATORIO DE MEDIDORES DE GAS', {negrita:true, tam:18, color_texto:BLANCO, color_fondo:AZUL, borde:bordeMedio});
+      ws.getRow(1).height = 35;
+      ws.mergeCells('A2:T2');
+      aplicar('A2', 'Reporte automático de inspección y registro de medidores', {tam:10, italica:true, color_texto:'404040', color_fondo:GRIS});
+      ws.getRow(2).height = 18;
+      ws.mergeCells('A3:D3');
+      aplicar('A3', `👤 Operario: ${operario}`, {negrita:true, color_fondo:AZUL_CLARO, alineacion:'left'});
+      ws.mergeCells('E3:M3');
+      aplicar('E3', `📅 Fecha: ${fecha}`, {negrita:true, color_fondo:AZUL_CLARO});
+      ws.mergeCells('N3:T3');
+      aplicar('N3', `🏷 Lote: ${lote}`, {negrita:true, color_texto:BLANCO, color_fondo:AZUL});
+      ws.getRow(3).height = 22;
+      ws.getRow(4).height = 6;
+
+      const marcaT = datos[0]?.marca || 'METREX';
+      const modeloT = datos[0]?.modelo || 'G1.6';
+      const tarjetas = [
+        ['A5:E6', 'TOTAL DE\nMEDIDORES', String(total), AZUL_CLARO],
+        ['F5:J6', 'MARCA DEL\nLOTE', marcaT, VERDE_CLARO],
+        ['K5:N6', 'MODELO', modeloT, 'F4ECF7'],
+        ['O5:S6', 'ESTADO DEL\nLOTE', 'APROBADO', VERDE_CLARO]
+      ];
+      const AZUL_OSCURO_TARJETA = '17375E';
+      tarjetas.forEach(([rango, titulo, valor, color]) => {
+        ws.mergeCells(rango);
+        aplicar(rango.split(':')[0], `${titulo}\n${valor}`, {negrita:true, tam:11, color_texto:'FFFFFF', color_fondo:AZUL_OSCURO_TARJETA, borde:bordeMedio});
+      });
+      ws.getRow(5).height = 28;
+      ws.getRow(6).height = 28;
+      ws.getRow(7).height = 6;
+
+      ws.mergeCells('A8:N8');
+      aplicar('A8', 'RESUMEN DE MEDIDORES DEL LOTE', {negrita:true, tam:11, color_texto:BLANCO, color_fondo:AZUL});
+      ws.getRow(8).height = 22;
+
+      const cols = ['#','Marca','Modelo','Nro. Serie Medidor','Año','Vol. Cíclico','Tipo','Color','Nro. Serie Precinto','Registro Inicial (m³)','Registro Final (m³)','Diferencia (m³)','Foto','Observación'];
+      cols.forEach((h, i) => {
+        aplicar(ws.getCell(9, i+1).address, h, {negrita:true, tam:9, color_texto:BLANCO, color_fondo:ROJO});
+      });
+      ws.getRow(9).height = 26.4;
+
+      const nombresImagenes = datos.map((d, i) => `${String(i+1).padStart(2,'0')}_${d.serie_medidor}.png`);
+
+      datos.forEach((d, i) => {
+        const fila = 10 + i;
+        const colorFila = i % 2 === 0 ? GRIS : BLANCO;
+        const obs = observaciones[i] || 'NINGUNA';
+
+        const regIni = parseFloat((d.registro || '0').replace(',', '.'));
+        const regFin = parseFloat((registrosFinales[i] || '0').replace(',', '.'));
+        const diff = (!isNaN(regIni) && !isNaN(regFin) && registrosFinales[i]) ? (regFin - regIni).toFixed(3).replace('.', ',') : 'N/D';
+
+        const valores = [
+          i+1, d.marca||'METREX', d.modelo||'G1.6', d.serie_medidor, d.anio_medidor || 'N/D',
+          '0.7 dm³', 'Circular', 'Verde', d.serie_precinto || 'N/D',
+          `${d.registro} m³`, `${registrosFinales[i]} m³`, `${diff} m³`, '', obs
+        ];
+        valores.forEach((v, j) => {
+          const col = j + 1;
+          let fondo = colorFila;
+          if (col === 14 && obs !== 'NINGUNA') fondo = 'FDEDEC';
+          if (col === 12) fondo = 'D5F5E3';
+          aplicar(ws.getCell(fila, col).address, v, {tam:9, color_fondo:fondo});
+          if (col === 14) ws.getCell(fila, col).alignment = {horizontal:'center', vertical:'middle', wrapText:false};
+        });
+        const cLink = ws.getCell(fila, 13);
+        cLink.value = {text: `📷 Ver foto ${i+1}`, hyperlink: `imagenes/${nombresImagenes[i]}`};
+        cLink.font = {bold:true, size:9, color:{argb:'FF'+AZUL_LINK}, underline:true};
+        cLink.alignment = {horizontal:'center', vertical:'middle'};
+        cLink.fill = {type:'pattern', pattern:'solid', fgColor:{argb:'FF'+VERDE_CLARO}};
+        cLink.border = borde;
+        ws.getRow(fila).height = 16;
+      });
+
+      const filaComentariosInicio = 10 + total + 2;
+      const tieneComentarios = comentarios.some(c => c && c.trim() !== '');
+      if (tieneComentarios) {
+        ws.mergeCells(`A${filaComentariosInicio}:N${filaComentariosInicio}`);
+        aplicar(`A${filaComentariosInicio}`, 'COMENTARIOS ADICIONALES', {negrita:true, tam:11, color_texto:BLANCO, color_fondo:VERDE});
+        ws.getRow(filaComentariosInicio).height = 22;
+
+        let f = filaComentariosInicio + 1;
+        comentarios.forEach((c, i) => {
+          if (c && c.trim() !== '') {
+            ws.mergeCells(`A${f}:B${f}`);
+            aplicar(`A${f}`, `#${i+1} (Serie ${datos[i].serie_medidor})`, {negrita:true, tam:9, color_fondo:AZUL_CLARO, alineacion:'left'});
+            ws.mergeCells(`C${f}:N${f}`);
+            aplicar(`C${f}`, c, {tam:9, color_fondo:BLANCO, alineacion:'left'});
+            ws.getRow(f).height = 18;
+            f++;
+          }
+        });
+      }
+
+      ws.mergeCells('O8:T8');
+      aplicar('O8', 'DETALLES DEL LOTE', {negrita:true, tam:11, color_texto:BLANCO, color_fondo:AZUL});
+
+      const detalles = [
+        ['Lote:', lote], ['Fecha y hora:', fecha], ['Operario:', operario],
+        ['Marca:', marcaT], ['Modelo:', modeloT], ['Tipo:', 'Circular'],
+        ['Vol. Cíclico:', '0.7 dm³ (fijo)'], ['Color:', 'Verde'],
+        ['Total medidores:', String(total)], ['Supervisados:', `${total} (100%)`]
+      ];
+      detalles.forEach(([k, v], i) => {
+        const f = 9 + i;
+        ws.mergeCells(`O${f}:P${f}`);
+        aplicar(`O${f}`, k, {negrita:true, tam:8, color_fondo:AZUL_CLARO, alineacion:'left'});
+        ws.mergeCells(`Q${f}:T${f}`);
+        aplicar(`Q${f}`, v, {tam:8, color_fondo:BLANCO, alineacion:'left'});
+        ws.getRow(f).height = 16;
+      });
+
+      const certFila = 9 + detalles.length + 1;
+      ws.mergeCells(`O${certFila}:T${certFila+2}`);
+      aplicar(`O${certFila}`, `Certifico que el proceso fue supervisado correctamente\n— ${operario} —\n${fecha}`, {negrita:true, italica:true, tam:8, color_fondo:VERDE_CLARO, borde:bordeMedio});
+      ws.getRow(certFila).height = 18;
+      ws.getRow(certFila+1).height = 18;
+      ws.getRow(certFila+2).height = 18;
+
+      const estFila = certFila + 4;
+      ws.mergeCells(`O${estFila}:T${estFila}`);
+      aplicar(`O${estFila}`, 'RESUMEN DE OBSERVACIONES', {negrita:true, tam:10, color_texto:BLANCO, color_fondo:VERDE});
+      ws.getRow(estFila).height = 20;
+
+      const sinObs = observaciones.filter(o => o === 'NINGUNA').length;
+      const conObs = total - sinObs;
+      const stats = [['Sin observación', sinObs, VERDE_CLARO], ['Con observación', conObs, AMARILLO]];
+      stats.forEach(([n, v, c], i) => {
+        const fr = estFila + 1 + i;
+        ws.mergeCells(`O${fr}:Q${fr}`);
+        aplicar(`O${fr}`, n, {tam:9, color_fondo:c});
+        ws.mergeCells(`R${fr}:T${fr}`);
+        aplicar(`R${fr}`, `${v} (${total ? Math.round(v/total*100) : 0}%)`, {negrita:true, tam:9, color_fondo:c});
+        ws.getRow(fr).height = 16;
+      });
+
+      const excelBuffer = await wb.xlsx.writeBuffer();
+      const zip = new JSZip();
+      zip.file(`Reporte_${lote}.xlsx`, excelBuffer);
+      const imgFolder = zip.folder("imagenes");
+      for (let i = 0; i < fotos.length; i++) {
+        const base64 = fotos[i].split(',')[1];
+        imgFolder.file(nombresImagenes[i], base64, {base64: true});
+      }
+      const blob = await zip.generateAsync({type:'blob'});
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `MetriLab_${lote}.zip`;
+      a.click();
+    }
+
+    function limpiarDatos() {
+      if (confirm('¿Eliminar todos los datos?')) {
+        historial = [];
+        contadorLoteDia = {};
+        lotesPendientes = [];
+        localStorage.removeItem('metrilab_historial');
+        localStorage.removeItem('metrilab_contador');
+        localStorage.removeItem('metrilab_pendientes');
+        actualizarAdmin();
+        actualizarBadgePendientes();
+        showToast('Datos eliminados');
+      }
+    }
+  </script>
 </body>
 </html>
