@@ -39,7 +39,7 @@
     window.iniciarApp();
   }
 
-  window.intentarLogin = async function() {
+  window.intentarLogin = () {
     const usuarioInput = document.getElementById('login-usuario').value.trim();
     const claveInput = document.getElementById('login-clave').value;
     const errBox = document.getElementById('login-error');
@@ -106,7 +106,7 @@
     }
   };
 
-  window.cerrarSesion = async function() {
+  window.cerrarSesion = () {
     if (!confirm('¿Cerrar sesión?')) return;
     await signOut(auth);
     window.operarioActual = null;
@@ -135,7 +135,7 @@
     document.getElementById('login-screen').style.display = 'flex';
   });
 
-  window.guardarLoteEnFirebase = async function(lote, operario, fecha, medidores, observaciones, registrosFinales) {
+  window.guardarLoteEnFirebase = (lote, operario, fecha, medidores, observaciones, registrosFinales) {
     try {
      const medidoresFirestore = medidores.map((m, i) => ({
         serie_medidor: m.serie_medidor || '',
@@ -162,7 +162,7 @@
     }
   };
 
-  window.eliminarLoteEnFirebase = async function(firebaseId, motivo) {
+  window.eliminarLoteEnFirebase = (firebaseId, motivo) {
     if (!firebaseId) return false;
     try {
       await updateDoc(doc(db, "lotes", firebaseId), {
@@ -176,7 +176,7 @@
     }
   };
 
-  window.obtenerResumenDesdeFirebase = async function(fechaISO) {
+  window.obtenerResumenDesdeFirebase = (fechaISO) {
     try {
       const q = query(collection(db, "lotes"), orderBy("creado", "desc"), limit(20));
       const snap = await getDocs(q);
@@ -190,7 +190,7 @@
     }
   };
 
-  window.crearLoteEnFirebase = async function(lote, operario, fecha) {
+  window.crearLoteEnFirebase = (lote, operario, fecha) {
     try {
       const docRef = await addDoc(collection(db, "lotes"), {
         lote, operario, fecha,
@@ -208,7 +208,7 @@
     }
   };
 
-  window.reordenarMedidoresEnFirebase = async function(loteId, mapaCompleto) {
+  window.reordenarMedidoresEnFirebase = (loteId, mapaCompleto) {
     if (!loteId) return false;
     try {
       await updateDoc(doc(db, "lotes", loteId), {
@@ -221,7 +221,7 @@
     }
   };
 
-  window.actualizarMedidorEnFirebase = async function(loteId, slot, datosMedidor) {
+  window.actualizarMedidorEnFirebase = (loteId, slot, datosMedidor) {
     if (!loteId) return false;
     try {
       const campo = `medidores.${slot}`;
@@ -236,7 +236,7 @@
     }
   };
 
-  window.finalizarLoteEnFirebase = async function(loteId, observaciones, registrosFinales, datos) {
+  window.finalizarLoteEnFirebase = (loteId, observaciones, registrosFinales, datos) {
     if (!loteId) return false;
     try {
       const updates = {};
@@ -1315,7 +1315,7 @@ function iniciarRegistro() {
   document.getElementById('confirmar-label').textContent = `Confirmo — ${op.split(' ')[0]} ${op.split(' ')[1]}`;
 }
 
-async function actualizarInicio() {
+ actualizarInicio() {
   const fechaISO = getFechaISO();
   const op = operarioActual || '';
   document.getElementById('greeting').textContent = `👋 Hola, ${op.split(' ')[0]}`;
@@ -1383,7 +1383,7 @@ function actualizarHistorial() {
     </div>`).join('');
 }
 
-window.eliminarLoteHistorial = async function(loteCodigo) {
+window.eliminarLoteHistorial = (loteCodigo) {
   const item = historial.find(h => h.lote === loteCodigo);
   if (!item || item.eliminado) return;
   const motivo = prompt(`¿Por qué quieres eliminar el lote ${loteCodigo}?\n(Este motivo quedará registrado)`);
@@ -1411,7 +1411,7 @@ function actualizarAdmin() {
 }
 
 // OPTIMIZACIÓN DE IMAGEN
-async function redimensionarImagen(dataUrl, maxAncho = 1024) {
+ redimensionarImagen(dataUrl, maxAncho = 1024) {
   return new Promise((resolve) => {
     const img = new Image();
     img.onload = () => {
@@ -1447,7 +1447,7 @@ function detectarAnomalia() {
 }
 
 // Crea el lote en Firebase si es la primera foto, o actualiza el medidor si ya existe
-async function sincronizarMedidorConFirebase(slot, datos) {
+ sincronizarMedidorConFirebase(slot, datos) {
   if (!loteFirebaseId) {
     if (!creandoLotePromise) {
       creandoLotePromise = (async () => {
@@ -1470,9 +1470,20 @@ async function sincronizarMedidorConFirebase(slot, datos) {
     fecha_ultimo_cambio: new Date()
   });
 }
+// DETECTAR CAMPOS DUDOSOS EN LA LECTURA DE LA IA
+function detectarCamposDudosos(d) {
+  if (!d) return ['serie_precinto', 'registro', 'anio_medidor'];
+  const dudosos = [];
+  const anioActual = new Date().getFullYear();
+  if (!/^G\d{7}$/.test(String(d.serie_precinto || '').trim().toUpperCase())) dudosos.push('serie_precinto');
+  if (!/^\d{1,5}$/.test(String(d.registro || '').trim())) dudosos.push('registro');
+  const anio = parseInt(d.anio_medidor, 10);
+  if (isNaN(anio) || anio < 2005 || anio > anioActual) dudosos.push('anio_medidor');
+  return dudosos;
+}
 
 // PROCESAR FOTO (en paralelo, respetando el orden de captura)
-async function procesarFoto(input) {
+ procesarFoto(input) {
   if (!input.files[0]) return;
   if (siguienteSlot === 0 && !loteEnEdicion && !loteManualIngresado) {
     showToast('⚠️ Ingresa el número de lote antes de tomar la primera foto');
@@ -1516,13 +1527,21 @@ async function procesarFoto(input) {
         let datos = null;
     let huboLimiteCuota = false;
 
-    async function intentarConClaves() {
+     async function intentarConClaves(extra = '', temp = 0) {
       for (const key of CLAVES) {
         try {
           const resp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${key}`, {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({contents:[{parts:[{text:PROMPT},{inline_data:{mime_type:mime,data:base64}}]}]})
+            body: JSON.stringify({
+              contents:[{parts:[{inline_data:{mime_type:mime,data:base64}},{text:PROMPT + extra}]}],
+              generationConfig:{
+                temperature: temp,
+                maxOutputTokens: 300,
+                responseMimeType: 'application/json',
+                thinkingConfig: { thinkingBudget: 0 }
+              }
+            })
           });
           if (resp.status === 429) {
             console.error('Clave con cuota agotada (429), probando siguiente:', key.slice(0,15));
@@ -1596,6 +1615,7 @@ function renderObservaciones() {
       return `<div class="medidor-item"><div style="display:flex;justify-content:space-between;align-items:center"><div class="medidor-num">#${i+1}</div><button class="btn-delete" onclick="eliminarMedidor(${i})">🗑️ Eliminar</button></div><div class="medidor-data" style="color:#fca5a5">⚠️ No se pudo leer. Elimina y vuelve a tomar la foto.</div></div>`;
     }
     const faltantes = validarCampos(d);
+    const dudosos = detectarCamposDudosos(d).filter(f => !faltantes.includes(f));
     const regInicial = parseFloat((d.registro || '0').replace(',', '.'));
     const regFinal = parseFloat((registrosFinalesActual[i] || '0').replace(',', '.'));
     const diff = (!isNaN(regInicial) && !isNaN(regFinal) && registrosFinalesActual[i]) ? (regFinal - regInicial).toFixed(3).replace('.', ',') : null;
