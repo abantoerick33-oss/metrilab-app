@@ -1642,6 +1642,12 @@ function renderObservaciones() {
       </div>
       <div class="medidor-data">Serie: ${d.serie_medidor || 'FALTA'} · Año: ${d.anio_medidor || 'N/D'} · Registro inicial: ${d.registro || 'FALTA'} ${d.unidad || ''}</div>
       ${camposFaltantes}
+      ${dudosos.map(f => `
+        <div class="field-manual">
+          <label>Verifica: ${f.replace('_',' ').toUpperCase()}</label>
+          <input type="text" value="${d[f] || ''}" onchange="actualizarCampo(${i}, '${f}', this.value)">
+        </div>
+      `).join('')}
       <select class="medidor-select ${observacionesActual[i]?'':'empty'}" onchange="cambiarObservacion(${i}, this.value)">
         <option value="">— Selecciona observación —</option>
         ${OBSERVACIONES.map(o => `<option value="${o}" ${observacionesActual[i]===o?'selected':''}>${o}</option>`).join('')}
