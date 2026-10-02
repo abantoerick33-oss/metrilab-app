@@ -1227,11 +1227,11 @@ Si algún campo no es visible o legible, usa null. Devuelve SOLO el JSON, sin ma
 // Modelo de IA: cámbialo aquí para comparar velocidad (ej: 'gemini-2.5-flash-lite')
 const MODELO_IA = 'gemini-2.5-flash';
 
-// MODO_RECORTE: 'auto' (la IA ubica placa y precinto), 'guias' (cuadros fijos del visor) o 'completa' (foto completa, para comparar tiempos)
+// MODO_RECORTE: 'auto' (la IA ubica placa y precinto), 'guias' (cuadros fijos del visor) o 'completa' (foto completa)
 const MODO_RECORTE = 'auto';
 const MODELO_UBICAR = 'gemini-2.5-flash-lite'; // modelo rápido solo para ubicar las zonas
-const MARGEN_PLACA = 0.08;     // margen extra alrededor de la placa (8%)
-const MARGEN_PRECINTO = 0.25;  // el precinto es pequeño, se le da más margen (25%)
+const MARGEN_PLACA = 0.08;
+const MARGEN_PRECINTO = 0.25;
 
 const PROMPT_UBICAR = `Esta es una foto de un medidor de gas. Devuelve SOLO un JSON con las cajas delimitadoras de:
 - "placa": la placa frontal rectangular blanca que contiene el contador de dígitos y los datos impresos (marca, serie, año). Incluye toda la placa.
@@ -1486,6 +1486,7 @@ async function redimensionarImagen(dataUrl, maxAncho = 1024) {
       ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
       resolve(canvas.toDataURL('image/jpeg', 0.85));
     };
+    img.onerror = () => resolve(dataUrl);
     img.src = dataUrl;
   });
 }
@@ -1534,6 +1535,110 @@ async function sincronizarMedidorConFirebase(slot, datos) {
   });
 }
 
+// DETECTAR CAMPOS DUDOSOS EN LA LECTURA DE LA IA
+function detectarCamposDudosos(d) {
+  if (!d) return ['serie_precinto', 'registro', 'anio_medidor'];
+  const dudosos = [];
+  const anioActual = new Date().getFullYear();
+  if (!/^G\d{7}$/.test(String(d.serie_precinto || '').trim().toUpperCase())) dudosos.push('serie_precinto');
+  if (!/^\d{1,5}$/.test(String(d.registro || '').trim())) dudosos.push('registro');
+  const anio = parseInt(d.anio_medidor, 10);
+  if (isNaN(anio) || anio < 2005 || anio > anioActual) dudosos.push('anio_medidor');
+  return dudosos;
+}
+
+// ===== LLAMADAS A GEMINI: cola, reintentos y diagnóstico =====
+let _geminiActivas = 0;
+const _geminiEspera = [];
+const MAX_GEMINI_SIMULTANEAS = 3;
+const dormir = ms => new Promise(r => setTimeout(r, ms));
+
+function geminiAdquirir() {
+  return new Promise(res => {
+    if (_geminiActivas < MAX_GEMINI_SIMULTANEAS) { _geminiActivas++; res(); }
+    else _geminiEspera.push(res);
+  });
+}
+function geminiLiberar() {
+  const sig = _geminiEspera.shift();
+  if (sig) sig(); else _geminiActivas--;
+}
+
+async function unaLlamada(modelo, key, partes, temp, maxTokens) {
+  await geminiAdquirir();
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 30000);
+  try {
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelo}:generateContent?key=${key}`;
+    const enviar = (cfg) => fetch(url, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      signal: ctrl.signal,
+      body: JSON.stringify({ contents: [{parts: partes}], generationConfig: cfg })
+    });
+    let resp = await enviar({ temperature: temp, maxOutputTokens: maxTokens, responseMimeType: 'application/json', thinkingConfig: { thinkingBudget: 0 } });
+    // Si la API rechaza esa configuración (400), se reintenta con una configuración mínima
+    if (resp.status === 400) resp = await enviar({ temperature: temp, maxOutputTokens: Math.max(maxTokens, 2048) });
+    if (resp.status === 429) return { tipo: 'cuota', motivo: 'cuota de IA agotada (429)' };
+    let data = null;
+    try { data = await resp.json(); } catch (e) {}
+    if (resp.status >= 500) return { tipo: 'transitorio', motivo: `IA ocupada (${resp.status})` };
+    if (!resp.ok || (data && data.error)) {
+      const msg = (data && data.error && data.error.message) || `HTTP ${resp.status}`;
+      return { tipo: 'fatal', motivo: msg.slice(0, 90) };
+    }
+    const cand = data && data.candidates && data.candidates[0];
+    const texto = cand && cand.content && cand.content.parts ? cand.content.parts.map(p => p.text || '').join('') : '';
+    if (!texto) {
+      const bloqueo = data && data.promptFeedback && data.promptFeedback.blockReason;
+      return { tipo: 'transitorio', motivo: bloqueo ? `bloqueada (${bloqueo})` : (cand && cand.finishReason && cand.finishReason !== 'STOP' ? `respuesta incompleta (${cand.finishReason})` : 'respuesta vacía') };
+    }
+    const ini = texto.indexOf('{'), fin = texto.lastIndexOf('}');
+    if (ini === -1 || fin <= ini) return { tipo: 'transitorio', motivo: 'respuesta sin JSON' };
+    try { return { tipo: 'ok', json: JSON.parse(texto.slice(ini, fin + 1)) }; }
+    catch (e) { return { tipo: 'transitorio', motivo: 'JSON incompleto' }; }
+  } catch (err) {
+    return { tipo: 'transitorio', motivo: err.name === 'AbortError' ? 'tiempo de espera agotado' : 'sin conexión' };
+  } finally {
+    clearTimeout(timer);
+    geminiLiberar();
+  }
+}
+
+// Rota las claves y reintenta con pausa si hay cuota agotada o la IA está ocupada. Devuelve {json} o {error}
+async function llamarGemini({ modelo, partes, temp = 0, maxTokens = 300, claves, rondas = 3 }) {
+  if (!claves.length) return { error: 'no hay claves API (configúralas en Admin)' };
+  let motivo = 'sin respuesta';
+  for (let ronda = 0; ronda < rondas; ronda++) {
+    let reintentable = false;
+    for (const key of claves) {
+      const r = await unaLlamada(modelo, key, partes, temp, maxTokens);
+      if (r.tipo === 'ok') return { json: r.json };
+      motivo = r.motivo;
+      if (r.tipo !== 'fatal') reintentable = true;
+    }
+    if (!reintentable || ronda === rondas - 1) break;
+    showToast('⏳ IA ocupada, reintentando...');
+    await dormir(ronda === 0 ? 3000 : 8000);
+  }
+  return { error: motivo };
+}
+
+// Limpia y corrige formatos de lo que devuelve la IA
+function normalizarLectura(j) {
+  if (!j || typeof j !== 'object') return null;
+  const o = {};
+  ['marca','modelo','serie_medidor','anio_medidor','registro','unidad','volumen_ciclico','serie_precinto'].forEach(k => {
+    const v = j[k];
+    o[k] = (v === null || v === undefined || String(v).trim() === '' || String(v).toLowerCase() === 'null') ? null : String(v).trim();
+  });
+  if (o.modelo) o.modelo = o.modelo.toUpperCase().replace(',', '.').replace(/\s+/g, '');
+  if (o.serie_precinto) o.serie_precinto = o.serie_precinto.toUpperCase().replace(/\s+/g, '');
+  if (o.registro) o.registro = o.registro.split(/[,.]/)[0].replace(/\D/g, '').slice(0, 5) || null;
+  if (o.anio_medidor) { const m = o.anio_medidor.match(/\d{4}/); if (m) o.anio_medidor = m[0]; }
+  return o;
+}
+
 // ===== MODO AUTOMÁTICO: LA IA UBICA LA PLACA Y EL PRECINTO =====
 function obtenerClaves(slot) {
   const todas = [
@@ -1545,7 +1650,6 @@ function obtenerClaves(slot) {
   return [...todas.slice(inicio), ...todas.slice(0, inicio)];
 }
 
-// Convierte [ymin,xmin,ymax,xmax] (0 a 1000) en fracciones de 0 a 1; null si no es válida
 function cajaDesdeIA(c) {
   if (!Array.isArray(c) || c.length !== 4) return null;
   const [y1, x1, y2, x2] = c.map(n => Number(n) / 1000);
@@ -1555,55 +1659,34 @@ function cajaDesdeIA(c) {
 }
 
 async function ubicarZonas(dataUrlPeq, claves) {
-  const b64 = dataUrlPeq.split(',')[1];
-  for (const key of claves) {
-    try {
-      const resp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${MODELO_UBICAR}:generateContent?key=${key}`, {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({
-          contents: [{parts: [{inline_data: {mime_type: 'image/jpeg', data: b64}}, {text: PROMPT_UBICAR}]}],
-          generationConfig: {
-            temperature: 0,
-            maxOutputTokens: 120,
-            responseMimeType: 'application/json',
-            thinkingConfig: { thinkingBudget: 0 }
-          }
-        })
-      });
-      if (resp.status === 429) continue;
-      const data = await resp.json();
-      if (data.error) continue;
-      const texto = data.candidates[0].content.parts[0].text.replace(/```json|```/g, '').trim();
-      const r = JSON.parse(texto);
-      return { placa: cajaDesdeIA(r.placa), precinto: cajaDesdeIA(r.precinto) };
-    } catch (err) {
-      console.error('Ubicar zonas falló, probando siguiente clave:', err);
-    }
-  }
-  return null;
+  const r = await llamarGemini({
+    modelo: MODELO_UBICAR,
+    partes: [{inline_data: {mime_type: 'image/jpeg', data: dataUrlPeq.split(',')[1]}}, {text: PROMPT_UBICAR}],
+    maxTokens: 150, claves, rondas: 1
+  });
+  if (!r.json) return null;
+  return { placa: cajaDesdeIA(r.json.placa), precinto: cajaDesdeIA(r.json.precinto) };
 }
 
-// Recorta una zona de la foto ORIGINAL agregando un margen; devuelve el recorte y la caja final usada
 function recortarConMargen(dataUrlOriginal, caja, margen) {
-  return new Promise((resolve) => {
+  return new Promise((resolve, reject) => {
     const img = new Image();
     img.onload = () => {
       const bw = caja.x2 - caja.x1, bh = caja.y2 - caja.y1;
       const x1 = Math.max(0, caja.x1 - bw * margen), x2 = Math.min(1, caja.x2 + bw * margen);
       const y1 = Math.max(0, caja.y1 - bh * margen), y2 = Math.min(1, caja.y2 + bh * margen);
       const sx = Math.round(x1 * img.width), sy = Math.round(y1 * img.height);
-      const sw = Math.round((x2 - x1) * img.width), sh = Math.round((y2 - y1) * img.height);
+      const sw = Math.max(1, Math.round((x2 - x1) * img.width)), sh = Math.max(1, Math.round((y2 - y1) * img.height));
       const c = document.createElement('canvas');
       c.width = sw; c.height = sh;
       c.getContext('2d').drawImage(img, sx, sy, sw, sh, 0, 0, sw, sh);
       resolve({ url: c.toDataURL('image/jpeg', 0.92), caja: { x1, y1, x2, y2 } });
     };
+    img.onerror = () => reject(new Error('no se pudo recortar'));
     img.src = dataUrlOriginal;
   });
 }
 
-// Muestra por 4 segundos la foto con los cuadros verdes de lo que la IA encontró
 function mostrarZonasVerdes(dataUrlPeq, cajaPlaca, cajaPrecinto, slot) {
   const img = new Image();
   img.onload = () => {
@@ -1613,9 +1696,7 @@ function mostrarZonasVerdes(dataUrlPeq, cajaPlaca, cajaPrecinto, slot) {
     ctx.drawImage(img, 0, 0);
     ctx.lineWidth = Math.max(3, img.width / 160);
     ctx.strokeStyle = '#22C55E';
-    [cajaPlaca, cajaPrecinto].forEach(b => {
-      ctx.strokeRect(b.x1 * c.width, b.y1 * c.height, (b.x2 - b.x1) * c.width, (b.y2 - b.y1) * c.height);
-    });
+    [cajaPlaca, cajaPrecinto].forEach(b => ctx.strokeRect(b.x1 * c.width, b.y1 * c.height, (b.x2 - b.x1) * c.width, (b.y2 - b.y1) * c.height));
     let el = document.getElementById('zonas-preview');
     if (!el) {
       el = document.createElement('div');
@@ -1632,16 +1713,14 @@ function mostrarZonasVerdes(dataUrlPeq, cajaPlaca, cajaPrecinto, slot) {
 }
 
 // Devuelve {placa, precinto} (recortes) o null si la IA no encontró las dos zonas
-async function prepararRecortesAuto(dataUrlOriginal, slot) {
+async function prepararRecortesAuto(original, slot, claves) {
   try {
-    const claves = obtenerClaves(slot);
-    if (!claves.length) return null;
-    const peq = await redimensionarImagen(dataUrlOriginal, 640);
+    const peq = await redimensionarImagen(original, 640);
     const zonas = await ubicarZonas(peq, claves);
-    if (!zonas || !zonas.placa || !zonas.precinto) return null; // sin las dos zonas: se lee la foto completa
+    if (!zonas || !zonas.placa || !zonas.precinto) return null;
     const [rp, rpr] = await Promise.all([
-      recortarConMargen(dataUrlOriginal, zonas.placa, MARGEN_PLACA),
-      recortarConMargen(dataUrlOriginal, zonas.precinto, MARGEN_PRECINTO)
+      recortarConMargen(original, zonas.placa, MARGEN_PLACA),
+      recortarConMargen(original, zonas.precinto, MARGEN_PRECINTO)
     ]);
     mostrarZonasVerdes(peq, rp.caja, rpr.caja, slot);
     return { placa: rp.url, precinto: rpr.url };
@@ -1651,16 +1730,91 @@ async function prepararRecortesAuto(dataUrlOriginal, slot) {
   }
 }
 
-// DETECTAR CAMPOS DUDOSOS EN LA LECTURA DE LA IA
-function detectarCamposDudosos(d) {
-  if (!d) return ['serie_precinto', 'registro', 'anio_medidor'];
-  const dudosos = [];
-  const anioActual = new Date().getFullYear();
-  if (!/^G\d{7}$/.test(String(d.serie_precinto || '').trim().toUpperCase())) dudosos.push('serie_precinto');
-  if (!/^\d{1,5}$/.test(String(d.registro || '').trim())) dudosos.push('registro');
-  const anio = parseInt(d.anio_medidor, 10);
-  if (isNaN(anio) || anio < 2005 || anio > anioActual) dudosos.push('anio_medidor');
-  return dudosos;
+// Arma las imágenes a enviar: recortes (si hay) o foto completa
+function construirPartes(rec64, base64Completa, extra, completa) {
+  const img = d => ({inline_data: {mime_type: 'image/jpeg', data: d}});
+  if (!rec64) return [img(base64Completa), {text: PROMPT + extra}];
+  const partes = [img(rec64.placa), img(rec64.precinto)];
+  let texto = PROMPT_RECORTES;
+  if (completa) {
+    partes.push(img(base64Completa));
+    texto += '\nImagen 3: foto completa del medidor. Úsala si la placa o el precinto no se ven bien en las imágenes 1 y 2.';
+  }
+  partes.push({text: texto + extra});
+  return partes;
+}
+
+// Analiza UNA foto: ubica zonas, lee, valida, reintenta y guarda el resultado en su casilla
+async function analizarSlot(slot, original, recortesVisor) {
+  const tiempoInicio = Date.now();
+  let imgOptimizada = null;
+  try {
+    imgOptimizada = await redimensionarImagen(original, 1024);
+    const base64 = imgOptimizada.split(',')[1];
+    const claves = obtenerClaves(slot);
+
+    let recortes = recortesVisor || null;
+    if (!recortes && MODO_RECORTE === 'auto') recortes = await prepararRecortesAuto(original, slot, claves);
+
+    let rec64 = null;
+    if (recortes) {
+      const [rp, rpr] = await Promise.all([redimensionarImagen(recortes.placa, 1000), redimensionarImagen(recortes.precinto, 480)]);
+      rec64 = { placa: rp.split(',')[1], precinto: rpr.split(',')[1] };
+    }
+
+    const leer = async (extra, temp, completa, rondas = 3) => {
+      const r = await llamarGemini({ modelo: MODELO_IA, partes: construirPartes(rec64, base64, extra, completa), temp, maxTokens: 600, claves, rondas });
+      if (r.json) r.json = normalizarLectura(r.json);
+      return r;
+    };
+
+    let r = await leer('', 0, false, rec64 ? 1 : 3);
+    if (!r.json && rec64) { rec64 = null; r = await leer('', 0, false); } // si falló con recortes, prueba con la foto completa
+    let datos = r.json || null;
+    const motivo = r.error || '';
+
+    if (datos) {
+      const dudosos = detectarCamposDudosos(datos);
+      if (dudosos.length > 0) {
+        const pista = `\n\nATENCIÓN: en una lectura previa estos campos no cumplieron el formato esperado: ${dudosos.join(', ')}. Revisa la imagen con más cuidado (el precinto puede estar rotado) y respeta exactamente los formatos indicados.`;
+        const r2 = await leer(pista, 0.3, true);
+        if (r2.json && detectarCamposDudosos(r2.json).length < dudosos.length) datos = r2.json;
+      }
+    }
+
+    if (datos) {
+      if (!datos.marca) datos.marca = 'METREX';
+      if (!datos.modelo) datos.modelo = 'G1.6';
+      if (!datos.unidad) datos.unidad = 'm3';
+      if (!datos.volumen_ciclico) datos.volumen_ciclico = '0.7 dm3';
+      if (datos.registro) datos.registro = datos.registro.replace(/^0+/, '') || '0';
+
+      loteActual[slot] = datos;
+      fotosActual[slot] = imgOptimizada;
+      tiemposProcesamiento[slot] = Date.now() - tiempoInicio;
+      sincronizarMedidorConFirebase(slot, datos);
+      const anomalia = detectarAnomalia();
+      document.getElementById('warning-anomaly-container').innerHTML = anomalia ? `<div class="warning-anomaly">${anomalia}</div>` : '';
+    } else {
+      loteActual[slot] = { error: true, motivo: (motivo || 'sin respuesta de la IA').replace(/[<>]/g, '') };
+      fotosActual[slot] = imgOptimizada;
+    }
+  } catch (err) {
+    console.error('Error procesando la foto:', err);
+    loteActual[slot] = { error: true, motivo: ('error interno: ' + (err && err.message ? err.message : err)).replace(/[<>]/g, '') };
+    fotosActual[slot] = imgOptimizada || original;
+  }
+  document.getElementById('seccion-observaciones').style.display = 'block';
+  actualizarProgreso();
+  renderObservaciones();
+}
+
+function reintentarLectura(i) {
+  const foto = fotosActual[i];
+  if (!foto) { showToast('No hay foto guardada. Elimínala y toma otra.'); return; }
+  loteActual[i] = { procesando: true };
+  renderObservaciones();
+  analizarSlot(i, foto, null);
 }
 
 // PROCESAR FOTO (en paralelo, respetando el orden de captura)
@@ -1673,7 +1827,7 @@ async function procesarFoto(input) {
   }
   if (siguienteSlot >= 12) { showToast('Lote completo'); input.value = ''; return; }
   const file = input.files[0];
-  let recortes = input.recortes || null; // recortes de placa y precinto (solo vienen del visor)
+  const recortesVisor = input.recortes || null;
   input.value = ''; // libera la cámara de inmediato para la siguiente foto
 
   const slot = siguienteSlot;
@@ -1688,143 +1842,10 @@ async function procesarFoto(input) {
   actualizarProgreso();
   renderObservaciones();
 
-  const tiempoInicio = Date.now();
   const reader = new FileReader();
-  reader.onload = async (e) => {
-    // Redimensionar
-    const imgOptimizada = await redimensionarImagen(e.target.result, 1024);
-    const base64 = imgOptimizada.split(',')[1];
-    const mime = 'image/jpeg';
-
-    // MODO AUTOMÁTICO: la IA ubica la placa y el precinto y se recortan desde la foto original
-    if (!recortes && MODO_RECORTE === 'auto') {
-      recortes = await prepararRecortesAuto(e.target.result, slot);
-    }
-
-    // Si hay recortes (del visor o del modo automático), se preparan para enviarlos a la IA
-    let base64Placa = null, base64Precinto = null;
-    if (recortes) {
-      const [rPlaca, rPrecinto] = await Promise.all([
-        redimensionarImagen(recortes.placa, 1000),
-        redimensionarImagen(recortes.precinto, 480)
-      ]);
-      base64Placa = rPlaca.split(',')[1];
-      base64Precinto = rPrecinto.split(',')[1];
-    }
-
-    // Las 3 claves rotan: cada foto usa una clave distinta para procesar en
-    // paralelo, y si esa falla, prueba con las otras dos antes de rendirse
-    const TODAS_CLAVES = [
-      localStorage.getItem('metrilab_key'),
-      localStorage.getItem('metrilab_key_2'),
-      localStorage.getItem('metrilab_key_3')
-    ].filter(k => k);
-    const inicio = slot % TODAS_CLAVES.length;
-    const CLAVES = [...TODAS_CLAVES.slice(inicio), ...TODAS_CLAVES.slice(0, inicio)];
-
-    let datos = null;
-    let huboLimiteCuota = false;
-
-    // Arma las imágenes que se envían: recortes (visor) o foto completa (galería)
-    function construirPartes(extra, completa) {
-      if (!base64Placa) {
-        return [{inline_data:{mime_type:mime,data:base64}}, {text: PROMPT + extra}];
-      }
-      const partes = [
-        {inline_data:{mime_type:mime,data:base64Placa}},
-        {inline_data:{mime_type:mime,data:base64Precinto}}
-      ];
-      let texto = PROMPT_RECORTES;
-      if (completa) {
-        partes.push({inline_data:{mime_type:mime,data:base64}});
-        texto += '\nImagen 3: foto completa del medidor. Úsala si la placa o el precinto no se ven bien en las imágenes 1 y 2.';
-      }
-      partes.push({text: texto + extra});
-      return partes;
-    }
-
-    async function intentarConClaves(extra = '', temp = 0, completa = false) {
-      for (const key of CLAVES) {
-        try {
-          const resp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${MODELO_IA}:generateContent?key=${key}`, {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({
-              contents:[{parts: construirPartes(extra, completa)}],
-              generationConfig:{
-                temperature: temp,
-                maxOutputTokens: 300,
-                responseMimeType: 'application/json',
-                thinkingConfig: { thinkingBudget: 0 }
-              }
-            })
-          });
-          if (resp.status === 429) {
-            console.error('Clave con cuota agotada (429), probando siguiente:', key.slice(0,15));
-            huboLimiteCuota = true;
-            continue;
-          }
-          const data = await resp.json();
-          if (data.error) { continue; } // Si hay error, prueba la siguiente clave
-          const texto = data.candidates[0].content.parts[0].text.replace(/```json|```/g,'').trim();
-          return JSON.parse(texto);
-        } catch(err) {
-          console.error('Clave falló, probando siguiente:', err);
-          continue;
-        }
-      }
-      return null;
-    }
-
-    datos = await intentarConClaves();
-
-    // Si TODAS las claves dieron 429 (cuota agotada), espera 8 segundos y reintenta una vez más
-    if (!datos && huboLimiteCuota) {
-      showToast('⏳ Cuota de IA agotada, reintentando en unos segundos...');
-      await new Promise(r => setTimeout(r, 8000));
-      huboLimiteCuota = false;
-      datos = await intentarConClaves();
-    }
-
-    // Si la lectura tiene campos dudosos, reintenta UNA vez con una pista y se queda con la mejor
-    if (datos) {
-      const dudososIni = detectarCamposDudosos(datos);
-      if (dudososIni.length > 0) {
-        const pista = `\n\nATENCIÓN: en una lectura previa estos campos no cumplieron el formato esperado: ${dudososIni.join(', ')}. Revisa la imagen con más cuidado (el precinto puede estar rotado) y respeta exactamente los formatos indicados.`;
-        const segunda = await intentarConClaves(pista, 0.3, true);
-        if (segunda && detectarCamposDudosos(segunda).length < dudososIni.length) datos = segunda;
-      }
-    }
-
-    if (datos) {
-      // Rellenar defaults
-      if (!datos.marca) datos.marca = 'METREX';
-      if (!datos.modelo) datos.modelo = 'G1.6';
-      if (!datos.unidad) datos.unidad = 'm3';
-      if (!datos.volumen_ciclico) datos.volumen_ciclico = '0.7 dm3';
-      // Limpiar ceros a la izquierda del registro
-      if (datos.registro) {
-        datos.registro = datos.registro.replace(/^0+/, '') || '0';
-      }
-
-      loteActual[slot] = datos;
-      fotosActual[slot] = imgOptimizada;
-      tiemposProcesamiento[slot] = Date.now() - tiempoInicio;
-
-      sincronizarMedidorConFirebase(slot, datos);
-
-      // Alerta de anomalía
-      const anomalia = detectarAnomalia();
-      const contWarn = document.getElementById('warning-anomaly-container');
-      contWarn.innerHTML = anomalia ? `<div class="warning-anomaly">${anomalia}</div>` : '';
-
-      document.getElementById('seccion-observaciones').style.display = 'block';
-    } else {
-      loteActual[slot] = { error: true };
-      fotosActual[slot] = imgOptimizada;
-      document.getElementById('seccion-observaciones').style.display = 'block';
-    }
-    actualizarProgreso();
+  reader.onload = (e) => analizarSlot(slot, e.target.result, recortesVisor);
+  reader.onerror = () => {
+    loteActual[slot] = { error: true, motivo: 'no se pudo leer el archivo' };
     renderObservaciones();
   };
   reader.readAsDataURL(file);
@@ -1838,7 +1859,7 @@ function renderObservaciones() {
       return `<div class="medidor-item"><div class="medidor-num">#${i+1}</div><div class="medidor-data">⏳ Analizando foto...</div></div>`;
     }
     if (d.error) {
-      return `<div class="medidor-item"><div style="display:flex;justify-content:space-between;align-items:center"><div class="medidor-num">#${i+1}</div><button class="btn-delete" onclick="eliminarMedidor(${i})">🗑️ Eliminar</button></div><div class="medidor-data" style="color:#fca5a5">⚠️ No se pudo leer. Elimina y vuelve a tomar la foto.</div></div>`;
+      return `<div class="medidor-item"><div style="display:flex;justify-content:space-between;align-items:center"><div class="medidor-num">#${i+1}</div><button class="btn-delete" onclick="eliminarMedidor(${i})">🗑️ Eliminar</button></div><div class="medidor-data" style="color:#fca5a5">⚠️ No se pudo leer${d.motivo ? ' (' + d.motivo + ')' : ''}.</div><button class="btn-secondary" style="margin-top:6px" onclick="reintentarLectura(${i})">🔄 Reintentar lectura</button></div>`;
     }
     const faltantes = validarCampos(d);
     const dudosos = detectarCamposDudosos(d).filter(f => !faltantes.includes(f));
@@ -2184,15 +2205,11 @@ let ultimosRecortes = { placa: null, precinto: null };
 
 function posicionarGuias() {
   const hint = document.querySelector('.visor-hint');
-  if (MODO_RECORTE === 'auto') {
-    document.getElementById('guia-placa').style.display = 'none';
-    document.getElementById('guia-precinto').style.display = 'none';
-    hint.textContent = 'Encuadra el medidor completo (placa y precinto visibles)';
-    return;
-  }
-  document.getElementById('guia-placa').style.display = 'block';
-  document.getElementById('guia-precinto').style.display = 'block';
-  hint.textContent = 'Encaja la placa y el precinto en los cuadros';
+  const modoGuias = MODO_RECORTE === 'guias';
+  document.getElementById('guia-placa').style.display = modoGuias ? 'block' : 'none';
+  document.getElementById('guia-precinto').style.display = modoGuias ? 'block' : 'none';
+  hint.textContent = modoGuias ? 'Encaja la placa y el precinto en los cuadros' : 'Encuadra el medidor completo (placa y precinto visibles)';
+  if (!modoGuias) return;
   [['guia-placa', GUIAS.placa], ['guia-precinto', GUIAS.precinto]].forEach(([id, g]) => {
     const el = document.getElementById(id);
     el.style.left = (g.x * 100) + '%';
