@@ -1190,6 +1190,23 @@ EJEMPLO DE RESPUESTA CORRECTA (para un medidor que muestra "00123,422"):
 
 Si algún campo no es visible o legible, usa null. Devuelve SOLO el JSON, sin markdown, sin explicaciones.`;
 
+// Modelo de IA: cámbialo aquí para comparar velocidad (ej: 'gemini-2.5-flash-lite')
+const MODELO_IA = 'gemini-2.5-flash';
+
+const PROMPT_RECORTES = `Lee estas imágenes de un medidor de gas. Imagen 1: placa frontal con el contador y los datos impresos. Imagen 2: precinto de seguridad.
+
+Devuelve SOLO un objeto JSON con este esquema exacto, sin texto adicional:
+{"marca":"string o null","modelo":"string o null","serie_medidor":"string o null","anio_medidor":"string o null","registro":"string o null","serie_precinto":"string o null"}
+
+Reglas:
+- marca: fabricante impreso (ej: METREX, APOLO).
+- modelo: capacidad con punto decimal (ej: G1.6, G2.5). Nunca G1,6 ni G16.
+- serie_medidor: número de serie impreso junto al código de barras, solo dígitos.
+- anio_medidor: año de fabricación de 4 dígitos, impreso junto al número de serie (entre 2005 y hoy).
+- registro: SOLO los 5 dígitos del contador que están ANTES de la coma. No incluyas la coma ni los dígitos rojos. Ej: si ves 00478,134 devuelve 00478.
+- serie_precinto: formato G + 7 dígitos (ej: G0382186), leído de la imagen 2. Puede estar rotado.
+Si un campo no se lee con seguridad, usa null.`;
+
 // TEMA
 function toggleTheme() {
   const body = document.body;
@@ -1492,6 +1509,7 @@ function detectarCamposDudosos(d) {
   }
   if (siguienteSlot >= 12) { showToast('Lote completo'); input.value = ''; return; }
   const file = input.files[0];
+  const recortes = input.recortes || null; // recortes de placa y precinto (solo vienen del visor)
   input.value = ''; // libera la cámara de inmediato para la siguiente foto
 
   const slot = siguienteSlot;
@@ -1514,6 +1532,17 @@ function detectarCamposDudosos(d) {
     const base64 = imgOptimizada.split(',')[1];
     const mime = 'image/jpeg';
 
+    // Si la foto viene del visor, prepara los dos recortes que se enviarán a la IA
+    let base64Placa = null, base64Precinto = null;
+    if (recortes) {
+      const [rPlaca, rPrecinto] = await Promise.all([
+        redimensionarImagen(recortes.placa, 1000),
+        redimensionarImagen(recortes.precinto, 480)
+      ]);
+      base64Placa = rPlaca.split(',')[1];
+      base64Precinto = rPrecinto.split(',')[1];
+    }
+
     // Las 3 claves rotan: cada foto usa una clave distinta para procesar en
     // paralelo, y si esa falla, prueba con las otras dos antes de rendirse
     const TODAS_CLAVES = [
@@ -1527,14 +1556,32 @@ function detectarCamposDudosos(d) {
         let datos = null;
     let huboLimiteCuota = false;
 
-     async function intentarConClaves(extra = '', temp = 0) {
+     // Arma las imágenes que se envían: recortes (visor) o foto completa (galería)
+    function construirPartes(extra, completa) {
+      if (!base64Placa) {
+        return [{inline_data:{mime_type:mime,data:base64}}, {text: PROMPT + extra}];
+      }
+      const partes = [
+        {inline_data:{mime_type:mime,data:base64Placa}},
+        {inline_data:{mime_type:mime,data:base64Precinto}}
+      ];
+      let texto = PROMPT_RECORTES;
+      if (completa) {
+        partes.push({inline_data:{mime_type:mime,data:base64}});
+        texto += '\nImagen 3: foto completa del medidor. Úsala si la placa o el precinto no se ven bien en las imágenes 1 y 2.';
+      }
+      partes.push({text: texto + extra});
+      return partes;
+    }
+
+    async function intentarConClaves(extra = '', temp = 0, completa = false) {
       for (const key of CLAVES) {
         try {
-          const resp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${key}`, {
+          const resp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${MODELO_IA}:generateContent?key=${key}`, {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({
-              contents:[{parts:[{inline_data:{mime_type:mime,data:base64}},{text:PROMPT + extra}]}],
+              contents:[{parts: construirPartes(extra, completa)}],
               generationConfig:{
                 temperature: temp,
                 maxOutputTokens: 300,
