@@ -1227,6 +1227,18 @@ Si algún campo no es visible o legible, usa null. Devuelve SOLO el JSON, sin ma
 // Modelo de IA: cámbialo aquí para comparar velocidad (ej: 'gemini-2.5-flash-lite')
 const MODELO_IA = 'gemini-2.5-flash';
 
+// MODO_RECORTE: 'auto' (la IA ubica placa y precinto), 'guias' (cuadros fijos del visor) o 'completa' (foto completa, para comparar tiempos)
+const MODO_RECORTE = 'auto';
+const MODELO_UBICAR = 'gemini-2.5-flash-lite'; // modelo rápido solo para ubicar las zonas
+const MARGEN_PLACA = 0.08;     // margen extra alrededor de la placa (8%)
+const MARGEN_PRECINTO = 0.25;  // el precinto es pequeño, se le da más margen (25%)
+
+const PROMPT_UBICAR = `Esta es una foto de un medidor de gas. Devuelve SOLO un JSON con las cajas delimitadoras de:
+- "placa": la placa frontal rectangular blanca que contiene el contador de dígitos y los datos impresos (marca, serie, año). Incluye toda la placa.
+- "precinto": el precinto de seguridad (pieza pequeña con un código que empieza con G), normalmente cerca de una esquina o borde del cuerpo del medidor.
+Formato exacto: {"placa":[ymin,xmin,ymax,xmax],"precinto":[ymin,xmin,ymax,xmax]}
+Coordenadas enteras normalizadas de 0 a 1000. Si no ves alguno, usa null para ese campo.`;
+
 const PROMPT_RECORTES = `Lee estas imágenes de un medidor de gas. Imagen 1: placa frontal con el contador y los datos impresos. Imagen 2: precinto de seguridad.
 
 Devuelve SOLO un objeto JSON con este esquema exacto, sin texto adicional:
@@ -1522,6 +1534,123 @@ async function sincronizarMedidorConFirebase(slot, datos) {
   });
 }
 
+// ===== MODO AUTOMÁTICO: LA IA UBICA LA PLACA Y EL PRECINTO =====
+function obtenerClaves(slot) {
+  const todas = [
+    localStorage.getItem('metrilab_key'),
+    localStorage.getItem('metrilab_key_2'),
+    localStorage.getItem('metrilab_key_3')
+  ].filter(k => k);
+  const inicio = slot % (todas.length || 1);
+  return [...todas.slice(inicio), ...todas.slice(0, inicio)];
+}
+
+// Convierte [ymin,xmin,ymax,xmax] (0 a 1000) en fracciones de 0 a 1; null si no es válida
+function cajaDesdeIA(c) {
+  if (!Array.isArray(c) || c.length !== 4) return null;
+  const [y1, x1, y2, x2] = c.map(n => Number(n) / 1000);
+  if ([y1, x1, y2, x2].some(n => isNaN(n) || n < 0 || n > 1)) return null;
+  if (y2 - y1 < 0.03 || x2 - x1 < 0.03) return null;
+  return { y1, x1, y2, x2 };
+}
+
+async function ubicarZonas(dataUrlPeq, claves) {
+  const b64 = dataUrlPeq.split(',')[1];
+  for (const key of claves) {
+    try {
+      const resp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${MODELO_UBICAR}:generateContent?key=${key}`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+          contents: [{parts: [{inline_data: {mime_type: 'image/jpeg', data: b64}}, {text: PROMPT_UBICAR}]}],
+          generationConfig: {
+            temperature: 0,
+            maxOutputTokens: 120,
+            responseMimeType: 'application/json',
+            thinkingConfig: { thinkingBudget: 0 }
+          }
+        })
+      });
+      if (resp.status === 429) continue;
+      const data = await resp.json();
+      if (data.error) continue;
+      const texto = data.candidates[0].content.parts[0].text.replace(/```json|```/g, '').trim();
+      const r = JSON.parse(texto);
+      return { placa: cajaDesdeIA(r.placa), precinto: cajaDesdeIA(r.precinto) };
+    } catch (err) {
+      console.error('Ubicar zonas falló, probando siguiente clave:', err);
+    }
+  }
+  return null;
+}
+
+// Recorta una zona de la foto ORIGINAL agregando un margen; devuelve el recorte y la caja final usada
+function recortarConMargen(dataUrlOriginal, caja, margen) {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      const bw = caja.x2 - caja.x1, bh = caja.y2 - caja.y1;
+      const x1 = Math.max(0, caja.x1 - bw * margen), x2 = Math.min(1, caja.x2 + bw * margen);
+      const y1 = Math.max(0, caja.y1 - bh * margen), y2 = Math.min(1, caja.y2 + bh * margen);
+      const sx = Math.round(x1 * img.width), sy = Math.round(y1 * img.height);
+      const sw = Math.round((x2 - x1) * img.width), sh = Math.round((y2 - y1) * img.height);
+      const c = document.createElement('canvas');
+      c.width = sw; c.height = sh;
+      c.getContext('2d').drawImage(img, sx, sy, sw, sh, 0, 0, sw, sh);
+      resolve({ url: c.toDataURL('image/jpeg', 0.92), caja: { x1, y1, x2, y2 } });
+    };
+    img.src = dataUrlOriginal;
+  });
+}
+
+// Muestra por 4 segundos la foto con los cuadros verdes de lo que la IA encontró
+function mostrarZonasVerdes(dataUrlPeq, cajaPlaca, cajaPrecinto, slot) {
+  const img = new Image();
+  img.onload = () => {
+    const c = document.createElement('canvas');
+    c.width = img.width; c.height = img.height;
+    const ctx = c.getContext('2d');
+    ctx.drawImage(img, 0, 0);
+    ctx.lineWidth = Math.max(3, img.width / 160);
+    ctx.strokeStyle = '#22C55E';
+    [cajaPlaca, cajaPrecinto].forEach(b => {
+      ctx.strokeRect(b.x1 * c.width, b.y1 * c.height, (b.x2 - b.x1) * c.width, (b.y2 - b.y1) * c.height);
+    });
+    let el = document.getElementById('zonas-preview');
+    if (!el) {
+      el = document.createElement('div');
+      el.id = 'zonas-preview';
+      el.style.cssText = 'position:fixed;bottom:130px;left:8px;z-index:995;background:rgba(0,0,0,0.7);padding:6px;border-radius:8px;display:none';
+      document.body.appendChild(el);
+    }
+    el.innerHTML = `<div style="color:#22C55E;font-size:10px;font-weight:700;margin-bottom:3px">#${slot + 1} zonas encontradas</div><img src="${c.toDataURL('image/jpeg', 0.8)}" style="width:150px;display:block;border-radius:4px">`;
+    el.style.display = 'block';
+    clearTimeout(window._timerZonas);
+    window._timerZonas = setTimeout(() => { el.style.display = 'none'; }, 4000);
+  };
+  img.src = dataUrlPeq;
+}
+
+// Devuelve {placa, precinto} (recortes) o null si la IA no encontró las dos zonas
+async function prepararRecortesAuto(dataUrlOriginal, slot) {
+  try {
+    const claves = obtenerClaves(slot);
+    if (!claves.length) return null;
+    const peq = await redimensionarImagen(dataUrlOriginal, 640);
+    const zonas = await ubicarZonas(peq, claves);
+    if (!zonas || !zonas.placa || !zonas.precinto) return null; // sin las dos zonas: se lee la foto completa
+    const [rp, rpr] = await Promise.all([
+      recortarConMargen(dataUrlOriginal, zonas.placa, MARGEN_PLACA),
+      recortarConMargen(dataUrlOriginal, zonas.precinto, MARGEN_PRECINTO)
+    ]);
+    mostrarZonasVerdes(peq, rp.caja, rpr.caja, slot);
+    return { placa: rp.url, precinto: rpr.url };
+  } catch (err) {
+    console.error('Modo automático falló, se usa la foto completa:', err);
+    return null;
+  }
+}
+
 // DETECTAR CAMPOS DUDOSOS EN LA LECTURA DE LA IA
 function detectarCamposDudosos(d) {
   if (!d) return ['serie_precinto', 'registro', 'anio_medidor'];
@@ -1544,7 +1673,7 @@ async function procesarFoto(input) {
   }
   if (siguienteSlot >= 12) { showToast('Lote completo'); input.value = ''; return; }
   const file = input.files[0];
-  const recortes = input.recortes || null; // recortes de placa y precinto (solo vienen del visor)
+  let recortes = input.recortes || null; // recortes de placa y precinto (solo vienen del visor)
   input.value = ''; // libera la cámara de inmediato para la siguiente foto
 
   const slot = siguienteSlot;
@@ -1567,7 +1696,12 @@ async function procesarFoto(input) {
     const base64 = imgOptimizada.split(',')[1];
     const mime = 'image/jpeg';
 
-    // Si la foto viene del visor, prepara los dos recortes que se enviarán a la IA
+    // MODO AUTOMÁTICO: la IA ubica la placa y el precinto y se recortan desde la foto original
+    if (!recortes && MODO_RECORTE === 'auto') {
+      recortes = await prepararRecortesAuto(e.target.result, slot);
+    }
+
+    // Si hay recortes (del visor o del modo automático), se preparan para enviarlos a la IA
     let base64Placa = null, base64Precinto = null;
     if (recortes) {
       const [rPlaca, rPrecinto] = await Promise.all([
@@ -2043,12 +2177,22 @@ const GUIAS = {
   placa:    { x: 0.10, y: 0.12, w: 0.62, h: 0.26 },
   precinto: { x: 0.78, y: 0.44, w: 0.20, h: 0.13 }
 };
-const MOSTRAR_RECORTES_PRUEBA = true; // miniaturas de los recortes tras cada captura (para verificar)
+const MOSTRAR_RECORTES_PRUEBA = false; // miniaturas de los recortes tras cada captura (para verificar)
 
 let visorStream = null;
 let ultimosRecortes = { placa: null, precinto: null };
 
 function posicionarGuias() {
+  const hint = document.querySelector('.visor-hint');
+  if (MODO_RECORTE === 'auto') {
+    document.getElementById('guia-placa').style.display = 'none';
+    document.getElementById('guia-precinto').style.display = 'none';
+    hint.textContent = 'Encuadra el medidor completo (placa y precinto visibles)';
+    return;
+  }
+  document.getElementById('guia-placa').style.display = 'block';
+  document.getElementById('guia-precinto').style.display = 'block';
+  hint.textContent = 'Encaja la placa y el precinto en los cuadros';
   [['guia-placa', GUIAS.placa], ['guia-precinto', GUIAS.precinto]].forEach(([id, g]) => {
     const el = document.getElementById(id);
     el.style.left = (g.x * 100) + '%';
@@ -2161,7 +2305,7 @@ function capturarDesdeVisor() {
   canvas.toBlob((blob) => {
     if (!blob) { showToast('No se pudo capturar la foto'); return; }
     const file = new File([blob], 'captura.jpg', { type: 'image/jpeg' });
-    procesarFoto({ files: [file], value: '', recortes: recortesCaptura });
+    procesarFoto({ files: [file], value: '', recortes: MODO_RECORTE === 'guias' ? recortesCaptura : null });
     actualizarContadorVisor();
     if (siguienteSlot >= 12) cerrarVisor();
   }, 'image/jpeg', 0.92);
