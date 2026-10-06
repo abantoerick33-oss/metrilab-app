@@ -821,8 +821,20 @@
   .visor-hint { color: rgba(255,255,255,0.7); }
   #visor-caja { position: relative; background: #000; transition: opacity 0.12s; }
   #visor-video { width: 100%; height: 100%; display: block; }
-  .visor-guia { position: absolute; border: 2px solid #FACC15; border-radius: 6px; box-shadow: 0 0 10px rgba(250,204,21,0.5); pointer-events: none; }
-  .visor-guia span { position: absolute; top: 2px; left: 5px; font-size: 10px; font-weight: 700; color: #FACC15; letter-spacing: 1px; text-shadow: 0 0 4px #000; }
+  .visor-guia { position: absolute; border: 3px solid #FACC15; border-radius: 7px; box-shadow: 0 0 12px rgba(250,204,21,0.65), inset 0 0 8px rgba(250,204,21,0.12); pointer-events: none; transition: left 0.18s ease-out, top 0.18s ease-out, width 0.18s ease-out, height 0.18s ease-out, border-color 0.18s ease, box-shadow 0.18s ease; animation: visorGuiaPulso 1.15s ease-in-out infinite; }
+  .visor-guia.detectada { border-color: #FACC15; box-shadow: 0 0 14px rgba(250,204,21,0.75), inset 0 0 8px rgba(250,204,21,0.14); }
+  .visor-guia.capturada { border-color: #22C55E; box-shadow: 0 0 16px rgba(34,197,94,0.9), inset 0 0 10px rgba(34,197,94,0.16); animation: none; }
+  .visor-guia.no-detectada { border-color: #FACC15; opacity: 0.28; }
+  .visor-guia span { position: absolute; top: 3px; left: 6px; font-size: 10px; font-weight: 800; color: #FACC15; letter-spacing: 1px; text-shadow: 0 0 4px #000, 0 1px 2px #000; white-space: nowrap; }
+  .visor-guia.capturada span { color: #22C55E; }
+  @keyframes visorGuiaPulso { 0%,100% { opacity: 0.78; } 50% { opacity: 1; } }
+  .visor-estado { position: absolute; top: 45px; left: 50%; transform: translateX(-50%); z-index: 3; display: flex; align-items: center; gap: 7px; padding: 6px 11px; border-radius: 999px; background: rgba(0,0,0,0.68); border: 1px solid rgba(250,204,21,0.45); color: #FACC15; font-size: 11px; font-weight: 700; letter-spacing: 0.2px; backdrop-filter: blur(5px); white-space: nowrap; }
+  .visor-estado::before { content: ''; width: 8px; height: 8px; border-radius: 50%; background: #FACC15; box-shadow: 0 0 8px rgba(250,204,21,0.9); animation: visorEstadoPulso 0.9s ease-in-out infinite; }
+  .visor-estado.ok { color: #22C55E; border-color: rgba(34,197,94,0.5); }
+  .visor-estado.ok::before { background: #22C55E; box-shadow: 0 0 8px rgba(34,197,94,0.9); animation: none; }
+  .visor-estado.error { color: #F87171; border-color: rgba(248,113,113,0.5); }
+  .visor-estado.error::before { background: #F87171; box-shadow: 0 0 8px rgba(248,113,113,0.9); animation: none; }
+  @keyframes visorEstadoPulso { 0%,100% { opacity: .45; transform: scale(.8); } 50% { opacity: 1; transform: scale(1.15); } }
   #visor-prueba { position: absolute; bottom: 6px; left: 6px; display: none; gap: 6px; align-items: flex-end; background: rgba(0,0,0,0.6); padding: 6px; border-radius: 8px; }
   #visor-prueba img { border: 1px solid #FACC15; border-radius: 4px; display: block; }
   .visor-botones { position: absolute; bottom: 0; left: 0; right: 0; height: 110px; display: flex; align-items: center; justify-content: space-around; padding: 0 16px 10px; }
@@ -1093,6 +1105,7 @@
   </div>
   <div id="visor-caja">
     <video id="visor-video" autoplay playsinline muted></video>
+    <div class="visor-estado" id="visor-estado">Analizando cámara...</div>
     <div class="visor-guia" id="guia-placa"><span>PLACA</span></div>
     <div class="visor-guia" id="guia-precinto"><span>PRECINTO</span></div>
     <div id="visor-prueba"></div>
@@ -1664,8 +1677,20 @@ async function ubicarZonas(dataUrlPeq, claves) {
     partes: [{inline_data: {mime_type: 'image/jpeg', data: dataUrlPeq.split(',')[1]}}, {text: PROMPT_UBICAR}],
     maxTokens: 150, claves, rondas: 1
   });
-  if (!r.json) return null;
-  return { placa: cajaDesdeIA(r.json.placa), precinto: cajaDesdeIA(r.json.precinto) };
+
+  if (!r.json) {
+    return {
+      placa: null,
+      precinto: null,
+      error: r.error || 'La IA no devolvió una detección válida'
+    };
+  }
+
+  return {
+    placa: cajaDesdeIA(r.json.placa),
+    precinto: cajaDesdeIA(r.json.precinto),
+    error: null
+  };
 }
 
 function recortarConMargen(dataUrlOriginal, caja, margen) {
@@ -2197,86 +2222,89 @@ async function finalizarLote() {
 // ============================================================
 
 // ===== CONFIGURACIÓN DEL VISOR =====
-const MOSTRAR_RECORTES_PRUEBA = false; // miniaturas de los recortes tras cada captura (para verificar)
+const MOSTRAR_RECORTES_PRUEBA = false;
 
-// ===== CONFIGURACIÓN DEL DETECTOR DEL VISOR =====
-const DETECCION_VISOR_INTERVALO = 1200; // ms entre detecciones
-const DETECCION_VISOR_ANCHO = 640;
-const SUAVIZADO_VISOR = 0.35;
+// La IA analiza una imagen cada cierto tiempo.
+// No son cuadros fijos: las coordenadas vienen de la detección y se suavizan.
+const DETECCION_VISOR_INTERVALO = 900;
+const DETECCION_VISOR_ANCHO = 768;
+const SUAVIZADO_VISOR = 0.45;
 
 // ===== ESTADO DE LA CÁMARA =====
 let visorStream = null;
 let ultimosRecortes = { placa: null, precinto: null };
 
 // ===== ESTADO DE DETECCIÓN DINÁMICA =====
-let zonasVisorActuales = {
-  placa: null,
-  precinto: null
-};
-
-let zonasVisorSuavizadas = {
-  placa: null,
-  precinto: null
-};
-
+let zonasVisorActuales = { placa: null, precinto: null };
+let zonasVisorSuavizadas = { placa: null, precinto: null };
+let zonasVisorCapturadas = { placa: false, precinto: false };
 let visorDetectando = false;
 let visorDetectorTimer = null;
 let visorDetectorActivo = false;
 let ultimaDeteccionVisor = 0;
 
+function setEstadoVisor(texto, tipo = 'analizando') {
+  const estado = document.getElementById('visor-estado');
+  const hint = document.querySelector('.visor-hint');
+  if (estado) {
+    estado.textContent = texto;
+    estado.className = 'visor-estado' + (tipo === 'ok' ? ' ok' : tipo === 'error' ? ' error' : '');
+  }
+  if (hint) hint.textContent = texto;
+}
+
 // ============================================================
 // ===== POSICIONAR GUÍAS ====================================
 // ============================================================
-
 function posicionarGuias() {
-  const hint = document.querySelector('.visor-hint');
-
   const placa = document.getElementById('guia-placa');
   const precinto = document.getElementById('guia-precinto');
 
-  // Las guías ahora son dinámicas.
-  // No se muestran hasta que la IA detecte las zonas.
-  placa.style.display = 'none';
-  precinto.style.display = 'none';
-
-  if (hint) {
-    hint.textContent = 'Buscando placa y precinto...';
+  if (placa) {
+    placa.style.display = 'none';
+    placa.className = 'visor-guia';
   }
+  if (precinto) {
+    precinto.style.display = 'none';
+    precinto.className = 'visor-guia';
+  }
+
+  zonasVisorCapturadas = { placa: false, precinto: false };
+  setEstadoVisor('Analizando cámara...');
 }
 
 // ============================================================
 // ===== ACTUALIZAR GUÍA DINÁMICA =============================
 // ============================================================
-
-function actualizarGuiaDinamica(id, caja, visible = true) {
+function actualizarGuiaDinamica(id, caja, estado = 'detectada') {
   const el = document.getElementById(id);
-
   if (!el) return;
 
-  if (!caja || !visible) {
+  if (!caja) {
     el.style.display = 'none';
     return;
   }
 
   el.style.display = 'block';
-
+  el.className = 'visor-guia ' + (estado === 'capturada' ? 'capturada' : 'detectada');
   el.style.left = (caja.x1 * 100) + '%';
   el.style.top = (caja.y1 * 100) + '%';
-
   el.style.width = ((caja.x2 - caja.x1) * 100) + '%';
   el.style.height = ((caja.y2 - caja.y1) * 100) + '%';
+
+  const span = el.querySelector('span');
+  if (span) {
+    const nombre = id === 'guia-placa' ? 'PLACA' : 'PRECINTO';
+    span.textContent = estado === 'capturada' ? nombre + ' ✓' : nombre;
+  }
 }
 
 // ============================================================
 // ===== SUAVIZADO DE DETECCIÓN ===============================
 // ============================================================
-
 function suavizarCaja(anterior, nueva, factor = SUAVIZADO_VISOR) {
   if (!nueva) return anterior;
-
-  if (!anterior) {
-    return { ...nueva };
-  }
+  if (!anterior) return { ...nueva };
 
   return {
     x1: anterior.x1 + (nueva.x1 - anterior.x1) * factor,
@@ -2286,103 +2314,96 @@ function suavizarCaja(anterior, nueva, factor = SUAVIZADO_VISOR) {
   };
 }
 
+function actualizarEstadoGuias() {
+  actualizarGuiaDinamica(
+    'guia-placa',
+    zonasVisorActuales.placa,
+    zonasVisorCapturadas.placa ? 'capturada' : 'detectada'
+  );
+  actualizarGuiaDinamica(
+    'guia-precinto',
+    zonasVisorActuales.precinto,
+    zonasVisorCapturadas.precinto ? 'capturada' : 'detectada'
+  );
+}
+
 // ============================================================
 // ===== DETECTAR ZONAS EN EL VISOR ===========================
 // ============================================================
-
 async function detectarZonasEnVisor() {
   if (!visorStream || visorDetectando || !visorDetectorActivo) return;
 
   const video = document.getElementById('visor-video');
-
   if (!video || !video.videoWidth || !video.videoHeight) return;
 
   visorDetectando = true;
   ultimaDeteccionVisor = Date.now();
+  setEstadoVisor('Analizando placa y precinto...');
 
   try {
     const canvas = document.createElement('canvas');
-
-    const escala = Math.min(
-      DETECCION_VISOR_ANCHO / video.videoWidth,
-      1
-    );
-
+    const escala = Math.min(DETECCION_VISOR_ANCHO / video.videoWidth, 1);
     canvas.width = Math.round(video.videoWidth * escala);
     canvas.height = Math.round(video.videoHeight * escala);
 
-    const ctx = canvas.getContext('2d');
-
-    ctx.drawImage(
-      video,
-      0,
-      0,
-      canvas.width,
-      canvas.height
-    );
-
-    const frame = canvas.toDataURL('image/jpeg', 0.75);
+    const ctx = canvas.getContext('2d', { willReadFrequently: false });
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    const frame = canvas.toDataURL('image/jpeg', 0.82);
 
     const claves = obtenerClaves(siguienteSlot);
-
     if (!claves.length) {
-      console.warn('No hay claves API disponibles para detectar zonas');
+      setEstadoVisor('Configura una clave API en Admin', 'error');
       return;
     }
 
     const zonas = await ubicarZonas(frame, claves);
 
-    if (!zonas) return;
+    if (!zonas) {
+      setEstadoVisor('Sin respuesta de la IA', 'error');
+      return;
+    }
 
-    // ===== PLACA =====
     if (zonas.placa) {
       zonasVisorSuavizadas.placa = suavizarCaja(
         zonasVisorSuavizadas.placa,
         zonas.placa
       );
-
       zonasVisorActuales.placa = zonasVisorSuavizadas.placa;
-
-      actualizarGuiaDinamica(
-        'guia-placa',
-        zonasVisorActuales.placa,
-        true
-      );
     }
 
-    // ===== PRECINTO =====
     if (zonas.precinto) {
       zonasVisorSuavizadas.precinto = suavizarCaja(
         zonasVisorSuavizadas.precinto,
         zonas.precinto
       );
-
       zonasVisorActuales.precinto = zonasVisorSuavizadas.precinto;
-
-      actualizarGuiaDinamica(
-        'guia-precinto',
-        zonasVisorActuales.precinto,
-        true
-      );
     }
 
-    // ===== MENSAJE DEL VISOR =====
-    const hint = document.querySelector('.visor-hint');
+    actualizarEstadoGuias();
 
-    if (hint) {
-      if (zonas.placa && zonas.precinto) {
-        hint.textContent = 'Placa y precinto detectados ✓';
-      } else if (zonas.placa) {
-        hint.textContent = 'Placa detectada · buscando precinto...';
-      } else if (zonas.precinto) {
-        hint.textContent = 'Precinto detectado · buscando placa...';
-      } else {
-        hint.textContent = 'Buscando placa y precinto...';
-      }
+    const tienePlaca = !!zonasVisorActuales.placa;
+    const tienePrecinto = !!zonasVisorActuales.precinto;
+
+    if (tienePlaca && tienePrecinto) {
+      setEstadoVisor(
+        zonasVisorCapturadas.placa && zonasVisorCapturadas.precinto
+          ? 'Placa y precinto capturados ✓'
+          : 'Placa y precinto detectados ✓',
+        'ok'
+      );
+    } else if (tienePlaca) {
+      setEstadoVisor('Placa detectada · buscando precinto...');
+    } else if (tienePrecinto) {
+      setEstadoVisor('Precinto detectado · buscando placa...');
+    } else if (zonas.error) {
+      setEstadoVisor('IA activa · no encuentra las zonas todavía');
+    } else {
+      setEstadoVisor('IA activa · buscando placa y precinto...');
     }
 
   } catch (error) {
     console.error('Error en detección dinámica:', error);
+    setEstadoVisor('Error al analizar · reintentando...', 'error');
   } finally {
     visorDetectando = false;
   }
@@ -2391,23 +2412,19 @@ async function detectarZonasEnVisor() {
 // ============================================================
 // ===== INICIAR DETECTOR =====================================
 // ============================================================
-
 function iniciarDetectorVisor() {
   detenerDetectorVisor();
 
   visorDetectorActivo = true;
   visorDetectando = false;
+  zonasVisorActuales = { placa: null, precinto: null };
+  zonasVisorSuavizadas = { placa: null, precinto: null };
+  zonasVisorCapturadas = { placa: false, precinto: false };
 
-  zonasVisorActuales = {
-    placa: null,
-    precinto: null
-  };
+  posicionarGuias();
+  setEstadoVisor('Analizando cámara...');
 
-  zonasVisorSuavizadas = {
-    placa: null,
-    precinto: null
-  };
-
+  // Primera detección inmediata y luego seguimiento periódico.
   detectarZonasEnVisor();
 
   visorDetectorTimer = setInterval(() => {
@@ -2418,7 +2435,6 @@ function iniciarDetectorVisor() {
 // ============================================================
 // ===== DETENER DETECTOR =====================================
 // ============================================================
-
 function detenerDetectorVisor() {
   visorDetectorActivo = false;
 
@@ -2521,6 +2537,11 @@ function cerrarVisor() {
   zonasVisorSuavizadas = {
     placa: null,
     precinto: null
+  };
+
+  zonasVisorCapturadas = {
+    placa: false,
+    precinto: false
   };
 
   const guiaPlaca = document.getElementById('guia-placa');
@@ -2657,6 +2678,13 @@ function capturarDesdeVisor() {
 
   const recortesCaptura = ultimosRecortes;
 
+  // La captura fue realizada: ambos cuadros pasan de AMARILLO a VERDE.
+  zonasVisorCapturadas.placa = true;
+  zonasVisorCapturadas.precinto = true;
+  actualizarEstadoGuias();
+  setEstadoVisor('Placa y precinto capturados ✓', 'ok');
+  detenerDetectorVisor();
+
   if (MOSTRAR_RECORTES_PRUEBA) {
     mostrarRecortesPrueba();
   }
@@ -2692,7 +2720,12 @@ function capturarDesdeVisor() {
     actualizarContadorVisor();
 
     if (siguienteSlot >= 12) {
-      cerrarVisor();
+      setTimeout(() => cerrarVisor(), 700);
+    } else {
+      // Para el siguiente medidor, volvemos a amarillo y buscamos nuevas coordenadas.
+      setTimeout(() => {
+        if (visorStream) iniciarDetectorVisor();
+      }, 650);
     }
   }, 'image/jpeg', 0.92);
 }
