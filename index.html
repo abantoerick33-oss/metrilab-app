@@ -1229,16 +1229,9 @@ const MODELO_IA = 'gemini-2.5-flash';
 
 // MODO_RECORTE: 'auto' (la IA ubica placa y precinto), 'guias' (cuadros fijos del visor) o 'completa' (foto completa)
 const MODO_RECORTE = 'auto';
-const MODELO_UBICAR = 'gemini-2.5-flash-lite';
-
+const MODELO_UBICAR = 'gemini-2.5-flash-lite'; // modelo rápido solo para ubicar las zonas
 const MARGEN_PLACA = 0.08;
 const MARGEN_PRECINTO = 0.25;
-
-// ===== DETECCIÓN DINÁMICA DEL VISOR =====
-const DETECCION_VISOR_INTERVALO = 1200; // ms entre detecciones
-const DETECCION_VISOR_ANCHO = 640;       // imagen pequeña para detectar
-const SUAVIZADO_VISOR = 0.35;            // 0.1 = más estable / 0.9 = más rápido
-const MIN_CONFIANZA_CAJA = 0.03;        // tamaño mínimo permitido
 
 const PROMPT_UBICAR = `Esta es una foto de un medidor de gas. Devuelve SOLO un JSON con las cajas delimitadoras de:
 - "placa": la placa frontal rectangular blanca que contiene el contador de dígitos y los datos impresos (marca, serie, año). Incluye toda la placa.
@@ -2199,18 +2192,19 @@ async function finalizarLote() {
   showToast('✅ Lote finalizado y datos limpiados');
 }
 
-// ===== VISOR DE CÁMARA CON GUÍAS =====
-// Posición de los cuadros como fracción de la imagen (0 a 1): x, y = esquina superior izquierda; w, h = ancho y alto
-const GUIAS_RESPALDO = {
-  placa:    { x: 0.10, y: 0.12, w: 0.62, h: 0.26 },
-  precinto: { x: 0.78, y: 0.44, w: 0.20, h: 0.13 }
-};
+// ============================================================
+// ===== VISOR DE CÁMARA CON DETECCIÓN DINÁMICA ===============
+// ============================================================
+
+// ===== CONFIGURACIÓN DEL VISOR =====
 const MOSTRAR_RECORTES_PRUEBA = false; // miniaturas de los recortes tras cada captura (para verificar)
+
 // ===== CONFIGURACIÓN DEL DETECTOR DEL VISOR =====
 const DETECCION_VISOR_INTERVALO = 1200; // ms entre detecciones
 const DETECCION_VISOR_ANCHO = 640;
 const SUAVIZADO_VISOR = 0.35;
 
+// ===== ESTADO DE LA CÁMARA =====
 let visorStream = null;
 let ultimosRecortes = { placa: null, precinto: null };
 
@@ -2230,6 +2224,10 @@ let visorDetectorTimer = null;
 let visorDetectorActivo = false;
 let ultimaDeteccionVisor = 0;
 
+// ============================================================
+// ===== POSICIONAR GUÍAS ====================================
+// ============================================================
+
 function posicionarGuias() {
   const hint = document.querySelector('.visor-hint');
 
@@ -2237,14 +2235,19 @@ function posicionarGuias() {
   const precinto = document.getElementById('guia-precinto');
 
   // Las guías ahora son dinámicas.
+  // No se muestran hasta que la IA detecte las zonas.
   placa.style.display = 'none';
   precinto.style.display = 'none';
 
-  hint.textContent = 'Buscando placa y precinto...';
+  if (hint) {
+    hint.textContent = 'Buscando placa y precinto...';
+  }
 }
 
+// ============================================================
+// ===== ACTUALIZAR GUÍA DINÁMICA =============================
+// ============================================================
 
-// ===== ACTUALIZAR GUÍAS SEGÚN DETECCIÓN =====
 function actualizarGuiaDinamica(id, caja, visible = true) {
   const el = document.getElementById(id);
 
@@ -2264,8 +2267,10 @@ function actualizarGuiaDinamica(id, caja, visible = true) {
   el.style.height = ((caja.y2 - caja.y1) * 100) + '%';
 }
 
+// ============================================================
+// ===== SUAVIZADO DE DETECCIÓN ===============================
+// ============================================================
 
-  // ===== SUAVIZADO DE DETECCIÓN =====
 function suavizarCaja(anterior, nueva, factor = SUAVIZADO_VISOR) {
   if (!nueva) return anterior;
 
@@ -2279,8 +2284,156 @@ function suavizarCaja(anterior, nueva, factor = SUAVIZADO_VISOR) {
     x2: anterior.x2 + (nueva.x2 - anterior.x2) * factor,
     y2: anterior.y2 + (nueva.y2 - anterior.y2) * factor
   };
-} 
-  
+}
+
+// ============================================================
+// ===== DETECTAR ZONAS EN EL VISOR ===========================
+// ============================================================
+
+async function detectarZonasEnVisor() {
+  if (!visorStream || visorDetectando || !visorDetectorActivo) return;
+
+  const video = document.getElementById('visor-video');
+
+  if (!video || !video.videoWidth || !video.videoHeight) return;
+
+  visorDetectando = true;
+  ultimaDeteccionVisor = Date.now();
+
+  try {
+    const canvas = document.createElement('canvas');
+
+    const escala = Math.min(
+      DETECCION_VISOR_ANCHO / video.videoWidth,
+      1
+    );
+
+    canvas.width = Math.round(video.videoWidth * escala);
+    canvas.height = Math.round(video.videoHeight * escala);
+
+    const ctx = canvas.getContext('2d');
+
+    ctx.drawImage(
+      video,
+      0,
+      0,
+      canvas.width,
+      canvas.height
+    );
+
+    const frame = canvas.toDataURL('image/jpeg', 0.75);
+
+    const claves = obtenerClaves(siguienteSlot);
+
+    if (!claves.length) {
+      console.warn('No hay claves API disponibles para detectar zonas');
+      return;
+    }
+
+    const zonas = await ubicarZonas(frame, claves);
+
+    if (!zonas) return;
+
+    // ===== PLACA =====
+    if (zonas.placa) {
+      zonasVisorSuavizadas.placa = suavizarCaja(
+        zonasVisorSuavizadas.placa,
+        zonas.placa
+      );
+
+      zonasVisorActuales.placa = zonasVisorSuavizadas.placa;
+
+      actualizarGuiaDinamica(
+        'guia-placa',
+        zonasVisorActuales.placa,
+        true
+      );
+    }
+
+    // ===== PRECINTO =====
+    if (zonas.precinto) {
+      zonasVisorSuavizadas.precinto = suavizarCaja(
+        zonasVisorSuavizadas.precinto,
+        zonas.precinto
+      );
+
+      zonasVisorActuales.precinto = zonasVisorSuavizadas.precinto;
+
+      actualizarGuiaDinamica(
+        'guia-precinto',
+        zonasVisorActuales.precinto,
+        true
+      );
+    }
+
+    // ===== MENSAJE DEL VISOR =====
+    const hint = document.querySelector('.visor-hint');
+
+    if (hint) {
+      if (zonas.placa && zonas.precinto) {
+        hint.textContent = 'Placa y precinto detectados ✓';
+      } else if (zonas.placa) {
+        hint.textContent = 'Placa detectada · buscando precinto...';
+      } else if (zonas.precinto) {
+        hint.textContent = 'Precinto detectado · buscando placa...';
+      } else {
+        hint.textContent = 'Buscando placa y precinto...';
+      }
+    }
+
+  } catch (error) {
+    console.error('Error en detección dinámica:', error);
+  } finally {
+    visorDetectando = false;
+  }
+}
+
+// ============================================================
+// ===== INICIAR DETECTOR =====================================
+// ============================================================
+
+function iniciarDetectorVisor() {
+  detenerDetectorVisor();
+
+  visorDetectorActivo = true;
+  visorDetectando = false;
+
+  zonasVisorActuales = {
+    placa: null,
+    precinto: null
+  };
+
+  zonasVisorSuavizadas = {
+    placa: null,
+    precinto: null
+  };
+
+  detectarZonasEnVisor();
+
+  visorDetectorTimer = setInterval(() => {
+    detectarZonasEnVisor();
+  }, DETECCION_VISOR_INTERVALO);
+}
+
+// ============================================================
+// ===== DETENER DETECTOR =====================================
+// ============================================================
+
+function detenerDetectorVisor() {
+  visorDetectorActivo = false;
+
+  if (visorDetectorTimer) {
+    clearInterval(visorDetectorTimer);
+    visorDetectorTimer = null;
+  }
+
+  visorDetectando = false;
+}
+
+// ============================================================
+// ===== AJUSTAR VISOR ========================================
+// ============================================================
+
 function ajustarVisor() {
   const video = document.getElementById('visor-video');
   const caja = document.getElementById('visor-caja');
@@ -2299,19 +2452,33 @@ function actualizarContadorVisor() {
   document.getElementById('visor-contador').textContent = `Foto ${siguienteSlot} / 12`;
 }
 
+// ============================================================
+// ===== ABRIR VISOR ==========================================
+// ============================================================
+
 async function abrirVisor() {
   if (siguienteSlot === 0 && !loteEnEdicion && !loteManualIngresado) {
     showToast('⚠️ Ingresa el número de lote antes de tomar la primera foto');
     return;
   }
-  if (siguienteSlot >= 12) { showToast('Lote completo'); return; }
-  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-    document.getElementById('file-camara').click(); // respaldo: cámara normal
+
+  if (siguienteSlot >= 12) {
+    showToast('Lote completo');
     return;
   }
+
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    document.getElementById('file-camara').click();
+    return;
+  }
+
   try {
     visorStream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: { ideal: 'environment' }, width: { ideal: 2560 }, height: { ideal: 1440 } },
+      video: {
+        facingMode: { ideal: 'environment' },
+        width: { ideal: 2560 },
+        height: { ideal: 1440 }
+      },
       audio: false
     });
   } catch (e) {
@@ -2320,76 +2487,216 @@ async function abrirVisor() {
     document.getElementById('file-camara').click();
     return;
   }
+
   const video = document.getElementById('visor-video');
+
   video.srcObject = visorStream;
-  video.onloadedmetadata = () => { video.play(); ajustarVisor(); };
-  posicionarGuias();
-  actualizarContadorVisor();
+
+  video.onloadedmetadata = async () => {
+    await video.play();
+
+    ajustarVisor();
+    posicionarGuias();
+    actualizarContadorVisor();
+
+    iniciarDetectorVisor();
+  };
+
   document.getElementById('visor-prueba').style.display = 'none';
   document.getElementById('visor').style.display = 'flex';
 }
 
+// ============================================================
+// ===== CERRAR VISOR =========================================
+// ============================================================
+
 function cerrarVisor() {
+  detenerDetectorVisor();
+
+  zonasVisorActuales = {
+    placa: null,
+    precinto: null
+  };
+
+  zonasVisorSuavizadas = {
+    placa: null,
+    precinto: null
+  };
+
+  const guiaPlaca = document.getElementById('guia-placa');
+  const guiaPrecinto = document.getElementById('guia-precinto');
+
+  if (guiaPlaca) guiaPlaca.style.display = 'none';
+  if (guiaPrecinto) guiaPrecinto.style.display = 'none';
+
   if (visorStream) {
     visorStream.getTracks().forEach(t => t.stop());
     visorStream = null;
   }
+
   const video = document.getElementById('visor-video');
   video.srcObject = null;
+
   document.getElementById('visor').style.display = 'none';
 }
 
-function recortarZona(canvasOrigen, g) {
-  const sx = Math.round(g.x * canvasOrigen.width);
-  const sy = Math.round(g.y * canvasOrigen.height);
-  const sw = Math.round(g.w * canvasOrigen.width);
-  const sh = Math.round(g.h * canvasOrigen.height);
+// ============================================================
+// ===== RECORTE DE ZONA DINÁMICA =============================
+// ============================================================
+
+function recortarZonaDinamica(canvasOrigen, caja, margen = 0) {
+  if (!caja) return null;
+
+  const bw = caja.x2 - caja.x1;
+  const bh = caja.y2 - caja.y1;
+
+  const x1 = Math.max(0, caja.x1 - bw * margen);
+  const x2 = Math.min(1, caja.x2 + bw * margen);
+  const y1 = Math.max(0, caja.y1 - bh * margen);
+  const y2 = Math.min(1, caja.y2 + bh * margen);
+
+  const sx = Math.round(x1 * canvasOrigen.width);
+  const sy = Math.round(y1 * canvasOrigen.height);
+  const sw = Math.max(1, Math.round((x2 - x1) * canvasOrigen.width));
+  const sh = Math.max(1, Math.round((y2 - y1) * canvasOrigen.height));
+
   const c = document.createElement('canvas');
-  c.width = sw; c.height = sh;
-  c.getContext('2d').drawImage(canvasOrigen, sx, sy, sw, sh, 0, 0, sw, sh);
+  c.width = sw;
+  c.height = sh;
+
+  c.getContext('2d').drawImage(
+    canvasOrigen,
+    sx,
+    sy,
+    sw,
+    sh,
+    0,
+    0,
+    sw,
+    sh
+  );
+
   return c.toDataURL('image/jpeg', 0.92);
 }
 
 function mostrarRecortesPrueba() {
   const cont = document.getElementById('visor-prueba');
-  cont.innerHTML = `<img src="${ultimosRecortes.placa}" style="width:150px"><img src="${ultimosRecortes.precinto}" style="width:60px">`;
+
+  cont.innerHTML = `
+    <img src="${ultimosRecortes.placa}" style="width:150px">
+    <img src="${ultimosRecortes.precinto}" style="width:60px">
+  `;
+
   cont.style.display = 'flex';
+
   clearTimeout(window._timerPrueba);
-  window._timerPrueba = setTimeout(() => { cont.style.display = 'none'; }, 4000);
+
+  window._timerPrueba = setTimeout(() => {
+    cont.style.display = 'none';
+  }, 4000);
 }
+
+// ============================================================
+// ===== CAPTURAR DESDE VISOR ================================
+// ============================================================
 
 function capturarDesdeVisor() {
   const video = document.getElementById('visor-video');
   const vw = video.videoWidth, vh = video.videoHeight;
-  if (!vw || !vh) { showToast('La cámara aún no está lista'); return; }
-  if (siguienteSlot >= 12) { cerrarVisor(); return; }
+
+  if (!vw || !vh) {
+    showToast('La cámara aún no está lista');
+    return;
+  }
+
+  if (siguienteSlot >= 12) {
+    cerrarVisor();
+    return;
+  }
+
+  // La captura solamente continúa cuando ambas zonas
+  // han sido detectadas dinámicamente.
+  const placa = zonasVisorActuales.placa;
+  const precinto = zonasVisorActuales.precinto;
+
+  if (!placa || !precinto) {
+    showToast('⚠️ Espera a que se detecten la placa y el precinto');
+    return;
+  }
 
   const canvas = document.createElement('canvas');
-  canvas.width = vw; canvas.height = vh;
-  canvas.getContext('2d').drawImage(video, 0, 0, vw, vh);
+  canvas.width = vw;
+  canvas.height = vh;
 
-  // Recortes de las dos zonas (se envían a la IA)
+  canvas.getContext('2d').drawImage(
+    video,
+    0,
+    0,
+    vw,
+    vh
+  );
+
+  // Recortes usando las coordenadas DINÁMICAS detectadas.
   ultimosRecortes = {
-    placa: recortarZona(canvas, GUIAS.placa),
-    precinto: recortarZona(canvas, GUIAS.precinto)
+    placa: recortarZonaDinamica(
+      canvas,
+      placa,
+      MARGEN_PLACA
+    ),
+    precinto: recortarZonaDinamica(
+      canvas,
+      precinto,
+      MARGEN_PRECINTO
+    )
   };
-  const recortesCaptura = ultimosRecortes; // recortes de ESTA captura
-  if (MOSTRAR_RECORTES_PRUEBA) mostrarRecortesPrueba();
 
-  // Destello para confirmar la captura
+  if (!ultimosRecortes.placa || !ultimosRecortes.precinto) {
+    showToast('⚠️ No se pudieron generar los recortes');
+    return;
+  }
+
+  const recortesCaptura = ultimosRecortes;
+
+  if (MOSTRAR_RECORTES_PRUEBA) {
+    mostrarRecortesPrueba();
+  }
+
+  // Destello para confirmar la captura.
   const caja = document.getElementById('visor-caja');
   caja.style.opacity = '0.3';
-  setTimeout(() => { caja.style.opacity = '1'; }, 120);
 
-  // Entrega la foto completa al flujo actual, junto con los recortes
+  setTimeout(() => {
+    caja.style.opacity = '1';
+  }, 120);
+
+  // Entrega la foto completa al flujo actual,
+  // junto con los recortes dinámicos.
   canvas.toBlob((blob) => {
-    if (!blob) { showToast('No se pudo capturar la foto'); return; }
-    const file = new File([blob], 'captura.jpg', { type: 'image/jpeg' });
-    procesarFoto({ files: [file], value: '', recortes: MODO_RECORTE === 'guias' ? recortesCaptura : null });
+    if (!blob) {
+      showToast('No se pudo capturar la foto');
+      return;
+    }
+
+    const file = new File(
+      [blob],
+      'captura.jpg',
+      { type: 'image/jpeg' }
+    );
+
+    procesarFoto({
+      files: [file],
+      value: '',
+      recortes: recortesCaptura
+    });
+
     actualizarContadorVisor();
-    if (siguienteSlot >= 12) cerrarVisor();
+
+    if (siguienteSlot >= 12) {
+      cerrarVisor();
+    }
   }, 'image/jpeg', 0.92);
 }
+
 
 // GENERAR EXCEL + ZIP
 async function generarZIP(datos, fotos, observaciones, comentarios, registrosFinales, operario, fecha, lote) {
