@@ -2239,6 +2239,28 @@ function posicionarGuias() {
   hint.textContent = 'Buscando placa y precinto...';
 }
 
+
+// ===== ACTUALIZAR GUÍAS SEGÚN DETECCIÓN =====
+function actualizarGuiaDinamica(id, caja, visible = true) {
+  const el = document.getElementById(id);
+
+  if (!el) return;
+
+  if (!caja || !visible) {
+    el.style.display = 'none';
+    return;
+  }
+
+  el.style.display = 'block';
+
+  el.style.left = (caja.x1 * 100) + '%';
+  el.style.top = (caja.y1 * 100) + '%';
+
+  el.style.width = ((caja.x2 - caja.x1) * 100) + '%';
+  el.style.height = ((caja.y2 - caja.y1) * 100) + '%';
+}
+
+
 function ajustarVisor() {
   const video = document.getElementById('visor-video');
   const caja = document.getElementById('visor-caja');
@@ -2250,6 +2272,7 @@ function ajustarVisor() {
   caja.style.width = Math.floor(vw * escala) + 'px';
   caja.style.height = Math.floor(vh * escala) + 'px';
 }
+
 window.addEventListener('resize', ajustarVisor);
 
 function actualizarContadorVisor() {
