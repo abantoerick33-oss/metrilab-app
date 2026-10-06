@@ -2206,6 +2206,10 @@ const GUIAS_RESPALDO = {
   precinto: { x: 0.78, y: 0.44, w: 0.20, h: 0.13 }
 };
 const MOSTRAR_RECORTES_PRUEBA = false; // miniaturas de los recortes tras cada captura (para verificar)
+// ===== CONFIGURACIÓN DEL DETECTOR DEL VISOR =====
+const DETECCION_VISOR_INTERVALO = 1200; // ms entre detecciones
+const DETECCION_VISOR_ANCHO = 640;
+const SUAVIZADO_VISOR = 0.35;
 
 let visorStream = null;
 let ultimosRecortes = { placa: null, precinto: null };
@@ -2261,6 +2265,22 @@ function actualizarGuiaDinamica(id, caja, visible = true) {
 }
 
 
+  // ===== SUAVIZADO DE DETECCIÓN =====
+function suavizarCaja(anterior, nueva, factor = SUAVIZADO_VISOR) {
+  if (!nueva) return anterior;
+
+  if (!anterior) {
+    return { ...nueva };
+  }
+
+  return {
+    x1: anterior.x1 + (nueva.x1 - anterior.x1) * factor,
+    y1: anterior.y1 + (nueva.y1 - anterior.y1) * factor,
+    x2: anterior.x2 + (nueva.x2 - anterior.x2) * factor,
+    y2: anterior.y2 + (nueva.y2 - anterior.y2) * factor
+  };
+} 
+  
 function ajustarVisor() {
   const video = document.getElementById('visor-video');
   const caja = document.getElementById('visor-caja');
