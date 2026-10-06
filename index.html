@@ -1242,15 +1242,39 @@ const MODELO_IA = 'gemini-2.5-flash';
 
 // MODO_RECORTE: 'auto' (la IA ubica placa y precinto), 'guias' (cuadros fijos del visor) o 'completa' (foto completa)
 const MODO_RECORTE = 'auto';
-const MODELO_UBICAR = 'gemini-2.5-flash-lite'; // modelo rápido solo para ubicar las zonas
+const MODELO_UBICAR = 'gemini-2.5-flash'; // usamos Flash para mejorar la localización visual
 const MARGEN_PLACA = 0.08;
 const MARGEN_PRECINTO = 0.25;
 
-const PROMPT_UBICAR = `Esta es una foto de un medidor de gas. Devuelve SOLO un JSON con las cajas delimitadoras de:
-- "placa": la placa frontal rectangular blanca que contiene el contador de dígitos y los datos impresos (marca, serie, año). Incluye toda la placa.
-- "precinto": el precinto de seguridad (pieza pequeña con un código que empieza con G), normalmente cerca de una esquina o borde del cuerpo del medidor.
-Formato exacto: {"placa":[ymin,xmin,ymax,xmax],"precinto":[ymin,xmin,ymax,xmax]}
-Coordenadas enteras normalizadas de 0 a 1000. Si no ves alguno, usa null para ese campo.`;
+const PROMPT_UBICAR = `Actúa como un detector visual de alta precisión para un medidor de gas. Analiza ÚNICAMENTE la imagen actual que recibes.
+
+OBJETIVO: localizar DOS objetos físicos del medidor y devolver sus cajas delimitadoras.
+
+1) PLACA:
+- Es la placa frontal rectangular del medidor, ubicada en la parte superior/frontal.
+- Es la pieza que contiene la marca (por ejemplo METREX), los datos técnicos, el número de serie y la ventana del contador con los dígitos.
+- Debes encerrar TODA la placa frontal, no solamente la ventana negra de los dígitos.
+- No confundas la placa con el cuerpo circular del medidor, etiquetas moradas, cinta de papel ni fondo.
+
+2) PRECINTO:
+- Es el pequeño dispositivo físico de seguridad unido a un alambre/hilo en el borde del medidor.
+- En este tipo de medidor suele estar en la zona derecha, cerca del borde inferior/lateral de la placa, pero ESTA POSICIÓN NO ES FIJA: debes localizarlo por su apariencia en la imagen actual.
+- Puede ser transparente, metálico, plástico o tener una pequeña zona con código que empieza por G.
+- IMPORTANTE: NO marques la cinta de papel, una etiqueta, un sticker, una marca escrita a mano ni el texto impreso del medidor. Marca solamente el objeto físico del precinto y, si es visible, el pequeño código adherido a él.
+
+REGLAS DE DETECCIÓN:
+- Primero identifica visualmente el medidor completo para entender su orientación y luego localiza placa y precinto dentro de él.
+- Las cajas deben ajustarse al objeto visible en ESTA imagen; no uses posiciones fijas memorizadas.
+- Si el medidor está inclinado, las cajas deben seguir esa posición lo mejor posible.
+- Si un objeto está parcialmente oculto pero puedes identificarlo con seguridad, devuelve la caja de la parte visible.
+- Solo devuelve null si realmente no puedes localizar ese objeto.
+- No inventes cajas.
+
+FORMATO OBLIGATORIO. Devuelve SOLO JSON válido, sin markdown ni explicación:
+{"placa":[ymin,xmin,ymax,xmax],"precinto":[ymin,xmin,ymax,xmax]}
+
+Las coordenadas son enteros entre 0 y 1000, donde 0,0 es la esquina superior izquierda y 1000,1000 la esquina inferior derecha.
+Ejemplo de estructura válida: {"placa":[120,140,390,870],"precinto":[360,760,520,900]}`;
 
 const PROMPT_RECORTES = `Lee estas imágenes de un medidor de gas. Imagen 1: placa frontal con el contador y los datos impresos. Imagen 2: precinto de seguridad.
 
@@ -1672,10 +1696,18 @@ function cajaDesdeIA(c) {
 }
 
 async function ubicarZonas(dataUrlPeq, claves) {
-  const r = await llamarGemini({
+  const partes = [
+    {inline_data: {mime_type: 'image/jpeg', data: dataUrlPeq.split(',')[1]}},
+    {text: PROMPT_UBICAR}
+  ];
+
+  // Primera llamada con Flash, que es más capaz para localizar objetos pequeños.
+  let r = await llamarGemini({
     modelo: MODELO_UBICAR,
-    partes: [{inline_data: {mime_type: 'image/jpeg', data: dataUrlPeq.split(',')[1]}}, {text: PROMPT_UBICAR}],
-    maxTokens: 150, claves, rondas: 1
+    partes,
+    maxTokens: 180,
+    claves,
+    rondas: 1
   });
 
   if (!r.json) {
@@ -1686,10 +1718,37 @@ async function ubicarZonas(dataUrlPeq, claves) {
     };
   }
 
+  let placa = cajaDesdeIA(r.json.placa);
+  let precinto = cajaDesdeIA(r.json.precinto);
+
+  // Validación adicional: si la respuesta viene incompleta, hacemos una segunda
+  // interpretación de la misma imagen con instrucciones más directas.
+  if (!placa || !precinto) {
+    const promptRefuerzo = `${PROMPT_UBICAR}
+
+ATENCIÓN: vuelve a revisar toda la imagen antes de responder. Busca especialmente el pequeño precinto físico unido por un alambre en el borde derecho/lateral del medidor. No marques cinta de papel ni etiquetas. Si la placa rectangular blanca con el contador es visible, debes devolver su caja completa.`;
+
+    const r2 = await llamarGemini({
+      modelo: MODELO_UBICAR,
+      partes: [
+        {inline_data: {mime_type: 'image/jpeg', data: dataUrlPeq.split(',')[1]}},
+        {text: promptRefuerzo}
+      ],
+      maxTokens: 180,
+      claves,
+      rondas: 1
+    });
+
+    if (r2.json) {
+      placa = cajaDesdeIA(r2.json.placa) || placa;
+      precinto = cajaDesdeIA(r2.json.precinto) || precinto;
+    }
+  }
+
   return {
-    placa: cajaDesdeIA(r.json.placa),
-    precinto: cajaDesdeIA(r.json.precinto),
-    error: null
+    placa,
+    precinto,
+    error: (!placa || !precinto) ? 'No se localizaron ambas zonas con suficiente seguridad' : null
   };
 }
 
@@ -2226,9 +2285,10 @@ const MOSTRAR_RECORTES_PRUEBA = false;
 
 // La IA analiza una imagen cada cierto tiempo.
 // No son cuadros fijos: las coordenadas vienen de la detección y se suavizan.
-const DETECCION_VISOR_INTERVALO = 900;
-const DETECCION_VISOR_ANCHO = 768;
-const SUAVIZADO_VISOR = 0.45;
+const DETECCION_VISOR_INTERVALO = 1100;
+const DETECCION_VISOR_ANCHO = 1024;
+const SUAVIZADO_VISOR = 0.55;
+const DETECCION_MINIMA_ESTABLE = 2; // exige 2 detecciones consecutivas antes de considerar la zona lista
 
 // ===== ESTADO DE LA CÁMARA =====
 let visorStream = null;
@@ -2238,6 +2298,7 @@ let ultimosRecortes = { placa: null, precinto: null };
 let zonasVisorActuales = { placa: null, precinto: null };
 let zonasVisorSuavizadas = { placa: null, precinto: null };
 let zonasVisorCapturadas = { placa: false, precinto: false };
+let zonasVisorEstabilidad = { placa: 0, precinto: 0 };
 let visorDetectando = false;
 let visorDetectorTimer = null;
 let visorDetectorActivo = false;
@@ -2270,6 +2331,7 @@ function posicionarGuias() {
   }
 
   zonasVisorCapturadas = { placa: false, precinto: false };
+  zonasVisorEstabilidad = { placa: 0, precinto: 0 };
   setEstadoVisor('Analizando cámara...');
 }
 
@@ -2346,9 +2408,9 @@ async function detectarZonasEnVisor() {
     canvas.width = Math.round(video.videoWidth * escala);
     canvas.height = Math.round(video.videoHeight * escala);
 
-    const ctx = canvas.getContext('2d', { willReadFrequently: false });
+    const ctx = canvas.getContext('2d');
     ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-    const frame = canvas.toDataURL('image/jpeg', 0.82);
+    const frame = canvas.toDataURL('image/jpeg', 0.88);
 
     const claves = obtenerClaves(siguienteSlot);
     if (!claves.length) {
@@ -2357,46 +2419,49 @@ async function detectarZonasEnVisor() {
     }
 
     const zonas = await ubicarZonas(frame, claves);
-
     if (!zonas) {
-      setEstadoVisor('Sin respuesta de la IA', 'error');
+      setEstadoVisor('La IA no respondió · reintentando...', 'error');
       return;
     }
 
+    // Contadores de estabilidad: evitamos aceptar una detección aislada.
     if (zonas.placa) {
+      zonasVisorEstabilidad.placa++;
       zonasVisorSuavizadas.placa = suavizarCaja(
         zonasVisorSuavizadas.placa,
         zonas.placa
       );
       zonasVisorActuales.placa = zonasVisorSuavizadas.placa;
+    } else {
+      zonasVisorEstabilidad.placa = 0;
     }
 
     if (zonas.precinto) {
+      zonasVisorEstabilidad.precinto++;
       zonasVisorSuavizadas.precinto = suavizarCaja(
         zonasVisorSuavizadas.precinto,
         zonas.precinto
       );
       zonasVisorActuales.precinto = zonasVisorSuavizadas.precinto;
+    } else {
+      zonasVisorEstabilidad.precinto = 0;
     }
 
     actualizarEstadoGuias();
 
-    const tienePlaca = !!zonasVisorActuales.placa;
-    const tienePrecinto = !!zonasVisorActuales.precinto;
+    const placaLista = !!zonasVisorActuales.placa && zonasVisorEstabilidad.placa >= DETECCION_MINIMA_ESTABLE;
+    const precintoLista = !!zonasVisorActuales.precinto && zonasVisorEstabilidad.precinto >= DETECCION_MINIMA_ESTABLE;
 
-    if (tienePlaca && tienePrecinto) {
-      setEstadoVisor(
-        zonasVisorCapturadas.placa && zonasVisorCapturadas.precinto
-          ? 'Placa y precinto capturados ✓'
-          : 'Placa y precinto detectados ✓',
-        'ok'
-      );
-    } else if (tienePlaca) {
-      setEstadoVisor('Placa detectada · buscando precinto...');
-    } else if (tienePrecinto) {
-      setEstadoVisor('Precinto detectado · buscando placa...');
+    if (placaLista && precintoLista) {
+      setEstadoVisor('Placa y precinto detectados ✓ · LISTO PARA CAPTURAR', 'ok');
+    } else if (placaLista) {
+      setEstadoVisor('🟨 PLACA detectada · buscando PRECINTO...');
+    } else if (precintoLista) {
+      setEstadoVisor('🟨 PRECINTO detectado · buscando PLACA...');
+    } else if (zonas.placa || zonas.precinto) {
+      setEstadoVisor('Detectando · estabilizando posición...');
     } else if (zonas.error) {
-      setEstadoVisor('IA activa · no encuentra las zonas todavía');
+      setEstadoVisor('IA activa · mueve/acerca el medidor para detectar las zonas...');
     } else {
       setEstadoVisor('IA activa · buscando placa y precinto...');
     }
@@ -2420,6 +2485,7 @@ function iniciarDetectorVisor() {
   zonasVisorActuales = { placa: null, precinto: null };
   zonasVisorSuavizadas = { placa: null, precinto: null };
   zonasVisorCapturadas = { placa: false, precinto: false };
+  zonasVisorEstabilidad = { placa: 0, precinto: 0 };
 
   posicionarGuias();
   setEstadoVisor('Analizando cámara...');
@@ -2544,6 +2610,8 @@ function cerrarVisor() {
     precinto: false
   };
 
+  zonasVisorEstabilidad = { placa: 0, precinto: 0 };
+
   const guiaPlaca = document.getElementById('guia-placa');
   const guiaPrecinto = document.getElementById('guia-precinto');
 
@@ -2640,8 +2708,8 @@ function capturarDesdeVisor() {
   const placa = zonasVisorActuales.placa;
   const precinto = zonasVisorActuales.precinto;
 
-  if (!placa || !precinto) {
-    showToast('⚠️ Espera a que se detecten la placa y el precinto');
+  if (!placa || !precinto || zonasVisorEstabilidad.placa < DETECCION_MINIMA_ESTABLE || zonasVisorEstabilidad.precinto < DETECCION_MINIMA_ESTABLE) {
+    showToast('⚠️ Espera a que los cuadros estén estables en amarillo');
     return;
   }
 
