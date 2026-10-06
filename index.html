@@ -1229,9 +1229,16 @@ const MODELO_IA = 'gemini-2.5-flash';
 
 // MODO_RECORTE: 'auto' (la IA ubica placa y precinto), 'guias' (cuadros fijos del visor) o 'completa' (foto completa)
 const MODO_RECORTE = 'auto';
-const MODELO_UBICAR = 'gemini-2.5-flash-lite'; // modelo rápido solo para ubicar las zonas
+const MODELO_UBICAR = 'gemini-2.5-flash-lite';
+
 const MARGEN_PLACA = 0.08;
 const MARGEN_PRECINTO = 0.25;
+
+// ===== DETECCIÓN DINÁMICA DEL VISOR =====
+const DETECCION_VISOR_INTERVALO = 1200; // ms entre detecciones
+const DETECCION_VISOR_ANCHO = 640;       // imagen pequeña para detectar
+const SUAVIZADO_VISOR = 0.35;            // 0.1 = más estable / 0.9 = más rápido
+const MIN_CONFIANZA_CAJA = 0.03;        // tamaño mínimo permitido
 
 const PROMPT_UBICAR = `Esta es una foto de un medidor de gas. Devuelve SOLO un JSON con las cajas delimitadoras de:
 - "placa": la placa frontal rectangular blanca que contiene el contador de dígitos y los datos impresos (marca, serie, año). Incluye toda la placa.
@@ -2194,7 +2201,7 @@ async function finalizarLote() {
 
 // ===== VISOR DE CÁMARA CON GUÍAS =====
 // Posición de los cuadros como fracción de la imagen (0 a 1): x, y = esquina superior izquierda; w, h = ancho y alto
-const GUIAS = {
+const GUIAS_RESPALDO = {
   placa:    { x: 0.10, y: 0.12, w: 0.62, h: 0.26 },
   precinto: { x: 0.78, y: 0.44, w: 0.20, h: 0.13 }
 };
@@ -2203,20 +2210,33 @@ const MOSTRAR_RECORTES_PRUEBA = false; // miniaturas de los recortes tras cada c
 let visorStream = null;
 let ultimosRecortes = { placa: null, precinto: null };
 
+// ===== ESTADO DE DETECCIÓN DINÁMICA =====
+let zonasVisorActuales = {
+  placa: null,
+  precinto: null
+};
+
+let zonasVisorSuavizadas = {
+  placa: null,
+  precinto: null
+};
+
+let visorDetectando = false;
+let visorDetectorTimer = null;
+let visorDetectorActivo = false;
+let ultimaDeteccionVisor = 0;
+
 function posicionarGuias() {
   const hint = document.querySelector('.visor-hint');
-  const modoGuias = MODO_RECORTE === 'guias';
-  document.getElementById('guia-placa').style.display = modoGuias ? 'block' : 'none';
-  document.getElementById('guia-precinto').style.display = modoGuias ? 'block' : 'none';
-  hint.textContent = modoGuias ? 'Encaja la placa y el precinto en los cuadros' : 'Encuadra el medidor completo (placa y precinto visibles)';
-  if (!modoGuias) return;
-  [['guia-placa', GUIAS.placa], ['guia-precinto', GUIAS.precinto]].forEach(([id, g]) => {
-    const el = document.getElementById(id);
-    el.style.left = (g.x * 100) + '%';
-    el.style.top = (g.y * 100) + '%';
-    el.style.width = (g.w * 100) + '%';
-    el.style.height = (g.h * 100) + '%';
-  });
+
+  const placa = document.getElementById('guia-placa');
+  const precinto = document.getElementById('guia-precinto');
+
+  // Las guías ahora son dinámicas.
+  placa.style.display = 'none';
+  precinto.style.display = 'none';
+
+  hint.textContent = 'Buscando placa y precinto...';
 }
 
 function ajustarVisor() {
