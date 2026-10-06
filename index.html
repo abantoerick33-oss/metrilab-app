@@ -1246,35 +1246,158 @@ const MODELO_UBICAR = 'gemini-2.5-flash'; // usamos Flash para mejorar la locali
 const MARGEN_PLACA = 0.08;
 const MARGEN_PRECINTO = 0.25;
 
-const PROMPT_UBICAR = `Actúa como un detector visual de alta precisión para un medidor de gas. Analiza ÚNICAMENTE la imagen actual que recibes.
+const PROMPT_UBICAR = `
+ERES UN SISTEMA DE DETECCIÓN VISUAL ESPECIALIZADO EN MEDIDORES DE GAS.
 
-OBJETIVO: localizar DOS objetos físicos del medidor y devolver sus cajas delimitadoras.
+Analiza ÚNICAMENTE la imagen ACTUAL recibida desde la cámara.
+Tu objetivo es localizar exactamente DOS OBJETOS FÍSICOS REALES:
 
-1) PLACA:
-- Es la placa frontal rectangular del medidor, ubicada en la parte superior/frontal.
-- Es la pieza que contiene la marca (por ejemplo METREX), los datos técnicos, el número de serie y la ventana del contador con los dígitos.
-- Debes encerrar TODA la placa frontal, no solamente la ventana negra de los dígitos.
-- No confundas la placa con el cuerpo circular del medidor, etiquetas moradas, cinta de papel ni fondo.
+1. PLACA DEL MEDIDOR
+2. PRECINTO DE SEGURIDAD
 
-2) PRECINTO:
-- Es el pequeño dispositivo físico de seguridad unido a un alambre/hilo en el borde del medidor.
-- En este tipo de medidor suele estar en la zona derecha, cerca del borde inferior/lateral de la placa, pero ESTA POSICIÓN NO ES FIJA: debes localizarlo por su apariencia en la imagen actual.
-- Puede ser transparente, metálico, plástico o tener una pequeña zona con código que empieza por G.
-- IMPORTANTE: NO marques la cinta de papel, una etiqueta, un sticker, una marca escrita a mano ni el texto impreso del medidor. Marca solamente el objeto físico del precinto y, si es visible, el pequeño código adherido a él.
+NO uses posiciones fijas y NO reutilices coordenadas de imágenes anteriores.
+El medidor puede moverse, girar, acercarse, alejarse o cambiar de posición.
+Las coordenadas deben calcularse nuevamente para cada imagen.
 
-REGLAS DE DETECCIÓN:
-- Primero identifica visualmente el medidor completo para entender su orientación y luego localiza placa y precinto dentro de él.
-- Las cajas deben ajustarse al objeto visible en ESTA imagen; no uses posiciones fijas memorizadas.
-- Si el medidor está inclinado, las cajas deben seguir esa posición lo mejor posible.
-- Si un objeto está parcialmente oculto pero puedes identificarlo con seguridad, devuelve la caja de la parte visible.
-- Solo devuelve null si realmente no puedes localizar ese objeto.
-- No inventes cajas.
+========================================================
+PLACA
+========================================================
 
-FORMATO OBLIGATORIO. Devuelve SOLO JSON válido, sin markdown ni explicación:
-{"placa":[ymin,xmin,ymax,xmax],"precinto":[ymin,xmin,ymax,xmax]}
+La PLACA es la pieza rectangular frontal, normalmente ubicada en la parte
+superior/frontal del medidor. Es la superficie donde aparecen datos como:
+- METREX u otra marca
+- números del contador
+- código de barras
+- G1.6 / G2.5
+- Qmax / Qmin
+- año
+- número de serie
+- información técnica
 
-Las coordenadas son enteros entre 0 y 1000, donde 0,0 es la esquina superior izquierda y 1000,1000 la esquina inferior derecha.
-Ejemplo de estructura válida: {"placa":[120,140,390,870],"precinto":[360,760,520,900]}`;
+DEBES ENCERRAR TODA LA PLACA VISIBLE.
+
+NO marques solamente los números.
+NO marques solamente la ventana del contador.
+NO marques solamente el código de barras.
+NO marques todo el cuerpo del medidor.
+NO marques una etiqueta pequeña como si fuera la placa.
+
+La caja debe cubrir los bordes físicos visibles de la placa rectangular.
+
+========================================================
+PRECINTO
+========================================================
+
+El PRECINTO es un PEQUEÑO DISPOSITIVO FÍSICO DE SEGURIDAD instalado en
+el lado derecho/lateral del medidor y normalmente asociado a un alambre.
+
+En la imagen de referencia, el precinto se encuentra aproximadamente
+hacia el lado DERECHO del medidor, cerca de la zona inferior/derecha
+de la placa.
+
+IMPORTANTE: esta ubicación es solamente una referencia visual.
+NO uses coordenadas fijas. Debes seguir la posición REAL del precinto
+en la imagen actual.
+
+El alambre NO es el precinto.
+La cinta de papel NO es el precinto.
+El sticker morado NO es el precinto.
+Una etiqueta NO es el precinto.
+Un tornillo NO es el precinto.
+Una sombra o reflejo NO es el precinto.
+
+Busca específicamente el pequeño dispositivo físico que está asociado
+al alambre. La caja debe rodear EL DISPOSITIVO DEL PRECINTO y no todo
+el alambre.
+
+El precinto puede ser MUY PEQUEÑO respecto al medidor.
+NO lo descartes por su tamaño.
+NO hagas una caja grande sobre toda la zona derecha.
+Haz una caja ajustada al objeto físico visible.
+
+Si el precinto está parcialmente oculto por el alambre, detecta la parte
+visible del dispositivo si existe evidencia suficiente.
+
+========================================================
+REGLA ESPECIAL PARA EVITAR FALSOS POSITIVOS
+========================================================
+
+Es preferible devolver null antes que marcar un objeto incorrecto.
+
+Si ves una cinta de papel pero no ves el dispositivo de seguridad:
+"precinto": null
+
+Si ves únicamente un alambre pero no puedes distinguir el dispositivo:
+"precinto": null
+
+NO conviertas automáticamente cualquier objeto pequeño del lado derecho
+en un precinto.
+
+========================================================
+ANÁLISIS PASO A PASO
+========================================================
+
+1. Identifica primero el medidor completo y su orientación.
+2. Localiza la placa rectangular.
+3. Examina cuidadosamente el lado derecho/lateral del medidor.
+4. Busca el pequeño dispositivo físico conectado al alambre.
+5. Comprueba que no sea cinta, sticker, texto, tornillo o reflejo.
+6. Calcula las coordenadas reales de ambos objetos en ESTA imagen.
+
+========================================================
+FORMATO OBLIGATORIO
+========================================================
+
+Devuelve ÚNICAMENTE JSON válido.
+NO escribas explicaciones.
+NO escribas Markdown.
+NO agregues texto antes ni después del JSON.
+
+Formato EXACTO:
+{
+  "placa": [ymin, xmin, ymax, xmax],
+  "precinto": [ymin, xmin, ymax, xmax]
+}
+
+Las coordenadas son enteros entre 0 y 1000.
+
+El orden obligatorio es:
+[ymin, xmin, ymax, xmax]
+
+0,0 = esquina superior izquierda.
+1000,1000 = esquina inferior derecha.
+
+NO utilices [x,y,width,height].
+NO utilices píxeles.
+NO utilices coordenadas fijas.
+
+========================================================
+VERIFICACIÓN FINAL
+========================================================
+
+Antes de responder verifica:
+
+PLACA:
+- ¿La caja cubre la placa rectangular completa?
+- ¿No estoy marcando solo el texto o contador?
+- ¿No estoy marcando todo el medidor?
+
+PRECINTO:
+- ¿La caja está sobre el pequeño dispositivo físico?
+- ¿Está relacionado con el alambre?
+- ¿No estoy marcando solamente el alambre?
+- ¿No estoy marcando la cinta de papel?
+- ¿No estoy marcando el sticker morado?
+- ¿La caja es pequeña y ajustada al precinto?
+
+COORDENADAS:
+- ¿ymin < ymax?
+- ¿xmin < xmax?
+- ¿Todas están entre 0 y 1000?
+- ¿Corresponden a la imagen ACTUAL?
+
+Si un objeto no puede identificarse con seguridad, usa null para ese objeto.
+`;
 
 const PROMPT_RECORTES = `Lee estas imágenes de un medidor de gas. Imagen 1: placa frontal con el contador y los datos impresos. Imagen 2: precinto de seguridad.
 
@@ -1687,11 +1810,30 @@ function obtenerClaves(slot) {
   return [...todas.slice(inicio), ...todas.slice(0, inicio)];
 }
 
-function cajaDesdeIA(c) {
+function cajaDesdeIA(c, tipo = '') {
   if (!Array.isArray(c) || c.length !== 4) return null;
+
   const [y1, x1, y2, x2] = c.map(n => Number(n) / 1000);
-  if ([y1, x1, y2, x2].some(n => isNaN(n) || n < 0 || n > 1)) return null;
-  if (y2 - y1 < 0.03 || x2 - x1 < 0.03) return null;
+
+  if ([y1, x1, y2, x2].some(n => !Number.isFinite(n) || n < 0 || n > 1)) {
+    return null;
+  }
+
+  if (y2 <= y1 || x2 <= x1) return null;
+
+  const ancho = x2 - x1;
+  const alto = y2 - y1;
+
+  // La placa debe ocupar una zona razonablemente visible.
+  if (tipo === 'placa') {
+    if (ancho < 0.05 || alto < 0.03) return null;
+  }
+
+  // El precinto puede ser muy pequeño: no aplicar el mismo filtro que a la placa.
+  if (tipo === 'precinto') {
+    if (ancho < 0.005 || alto < 0.005) return null;
+  }
+
   return { y1, x1, y2, x2 };
 }
 
@@ -1701,7 +1843,6 @@ async function ubicarZonas(dataUrlPeq, claves) {
     {text: PROMPT_UBICAR}
   ];
 
-  // Primera llamada con Flash, que es más capaz para localizar objetos pequeños.
   let r = await llamarGemini({
     modelo: MODELO_UBICAR,
     partes,
@@ -1718,15 +1859,20 @@ async function ubicarZonas(dataUrlPeq, claves) {
     };
   }
 
-  let placa = cajaDesdeIA(r.json.placa);
-  let precinto = cajaDesdeIA(r.json.precinto);
+  let placa = cajaDesdeIA(r.json.placa, 'placa');
+  let precinto = cajaDesdeIA(r.json.precinto, 'precinto');
 
-  // Validación adicional: si la respuesta viene incompleta, hacemos una segunda
-  // interpretación de la misma imagen con instrucciones más directas.
+  // Segunda revisión únicamente cuando falta una de las zonas.
   if (!placa || !precinto) {
     const promptRefuerzo = `${PROMPT_UBICAR}
 
-ATENCIÓN: vuelve a revisar toda la imagen antes de responder. Busca especialmente el pequeño precinto físico unido por un alambre en el borde derecho/lateral del medidor. No marques cinta de papel ni etiquetas. Si la placa rectangular blanca con el contador es visible, debes devolver su caja completa.`;
+REVISION DE REFUERZO:
+Vuelve a analizar la imagen completa antes de responder.
+Si falta el PRECINTO, concentra especialmente la búsqueda en el lado
+DERECHO/LATERAL del medidor y busca el pequeño dispositivo físico unido
+al alambre. NO marques la cinta de papel, el sticker morado ni el alambre.
+Si falta la PLACA, busca la pieza rectangular frontal superior completa.
+No inventes coordenadas.`;
 
     const r2 = await llamarGemini({
       modelo: MODELO_UBICAR,
@@ -1740,8 +1886,8 @@ ATENCIÓN: vuelve a revisar toda la imagen antes de responder. Busca especialmen
     });
 
     if (r2.json) {
-      placa = cajaDesdeIA(r2.json.placa) || placa;
-      precinto = cajaDesdeIA(r2.json.precinto) || precinto;
+      placa = cajaDesdeIA(r2.json.placa, 'placa') || placa;
+      precinto = cajaDesdeIA(r2.json.precinto, 'precinto') || precinto;
     }
   }
 
@@ -2285,10 +2431,10 @@ const MOSTRAR_RECORTES_PRUEBA = false;
 
 // La IA analiza una imagen cada cierto tiempo.
 // No son cuadros fijos: las coordenadas vienen de la detección y se suavizan.
-const DETECCION_VISOR_INTERVALO = 1100;
+const DETECCION_VISOR_INTERVALO = 1200;
 const DETECCION_VISOR_ANCHO = 1024;
-const SUAVIZADO_VISOR = 0.55;
-const DETECCION_MINIMA_ESTABLE = 2; // exige 2 detecciones consecutivas antes de considerar la zona lista
+const SUAVIZADO_VISOR = 0.60;
+const DETECCION_MINIMA_ESTABLE = 1; // una detección válida + suavizado permite capturar sin bloquear al operador
 
 // ===== ESTADO DE LA CÁMARA =====
 let visorStream = null;
@@ -2410,7 +2556,7 @@ async function detectarZonasEnVisor() {
 
     const ctx = canvas.getContext('2d');
     ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-    const frame = canvas.toDataURL('image/jpeg', 0.88);
+    const frame = canvas.toDataURL('image/jpeg', 0.90);
 
     const claves = obtenerClaves(siguienteSlot);
     if (!claves.length) {
@@ -2459,7 +2605,7 @@ async function detectarZonasEnVisor() {
     } else if (precintoLista) {
       setEstadoVisor('🟨 PRECINTO detectado · buscando PLACA...');
     } else if (zonas.placa || zonas.precinto) {
-      setEstadoVisor('Detectando · estabilizando posición...');
+      setEstadoVisor('Detección encontrada · preparando captura...');
     } else if (zonas.error) {
       setEstadoVisor('IA activa · mueve/acerca el medidor para detectar las zonas...');
     } else {
@@ -2709,7 +2855,7 @@ function capturarDesdeVisor() {
   const precinto = zonasVisorActuales.precinto;
 
   if (!placa || !precinto || zonasVisorEstabilidad.placa < DETECCION_MINIMA_ESTABLE || zonasVisorEstabilidad.precinto < DETECCION_MINIMA_ESTABLE) {
-    showToast('⚠️ Espera a que los cuadros estén estables en amarillo');
+    showToast('⚠️ Espera a que aparezcan la placa y el precinto');
     return;
   }
 
