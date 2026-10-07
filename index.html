@@ -1824,23 +1824,34 @@ function cajaDesdeIA(c, tipo = '') {
   const ancho = x2 - x1;
   const alto = y2 - y1;
 
-  // La placa debe ocupar una zona razonablemente visible.
-  if (tipo === 'placa') {
-    if (ancho < 0.05 || alto < 0.03) return null;
-  }
-
-  // El precinto puede ser muy pequeño: no aplicar el mismo filtro que a la placa.
-  if (tipo === 'precinto') {
-    if (ancho < 0.005 || alto < 0.005) return null;
-  }
+  if (tipo === 'placa' && (ancho < 0.05 || alto < 0.03)) return null;
+  if (tipo === 'precinto' && (ancho < 0.005 || alto < 0.005)) return null;
 
   return { y1, x1, y2, x2 };
 }
 
 async function ubicarZonas(dataUrlPeq, claves) {
+  const img = new Image();
+  await new Promise(resolve => {
+    img.onload = resolve;
+    img.src = dataUrlPeq;
+  });
+
+  const cropX = Math.floor(img.width * 0.45);
+  const cropY = 0;
+  const cropW = img.width - cropX;
+  const cropH = img.height;
+
+  const canvasDerecha = document.createElement('canvas');
+  canvasDerecha.width = cropW;
+  canvasDerecha.height = cropH;
+  canvasDerecha.getContext('2d').drawImage(img, cropX, cropY, cropW, cropH, 0, 0, cropW, cropH);
+  const dataUrlDerecha = canvasDerecha.toDataURL('image/jpeg', 0.95);
+
   const partes = [
-    {inline_data: {mime_type: 'image/jpeg', data: dataUrlPeq.split(',')[1]}},
-    {text: PROMPT_UBICAR}
+    { inline_data: { mime_type: 'image/jpeg', data: dataUrlPeq.split(',')[1] } },
+    { inline_data: { mime_type: 'image/jpeg', data: dataUrlDerecha.split(',')[1] } },
+    { text: PROMPT_UBICAR }
   ];
 
   let r = await llamarGemini({
@@ -1860,41 +1871,24 @@ async function ubicarZonas(dataUrlPeq, claves) {
   }
 
   let placa = cajaDesdeIA(r.json.placa, 'placa');
-  let precinto = cajaDesdeIA(r.json.precinto, 'precinto');
+  let precintoIA = cajaDesdeIA(r.json.precinto, 'precinto');
+  let precintoConvertido = null;
 
-  // Segunda revisión únicamente cuando falta una de las zonas.
-  if (!placa || !precinto) {
-    const promptRefuerzo = `${PROMPT_UBICAR}
-
-REVISION DE REFUERZO:
-Vuelve a analizar la imagen completa antes de responder.
-Si falta el PRECINTO, concentra especialmente la búsqueda en el lado
-DERECHO/LATERAL del medidor y busca el pequeño dispositivo físico unido
-al alambre. NO marques la cinta de papel, el sticker morado ni el alambre.
-Si falta la PLACA, busca la pieza rectangular frontal superior completa.
-No inventes coordenadas.`;
-
-    const r2 = await llamarGemini({
-      modelo: MODELO_UBICAR,
-      partes: [
-        {inline_data: {mime_type: 'image/jpeg', data: dataUrlPeq.split(',')[1]}},
-        {text: promptRefuerzo}
-      ],
-      maxTokens: 180,
-      claves,
-      rondas: 1
-    });
-
-    if (r2.json) {
-      placa = cajaDesdeIA(r2.json.placa, 'placa') || placa;
-      precinto = cajaDesdeIA(r2.json.precinto, 'precinto') || precinto;
-    }
+  if (precintoIA) {
+    const offsetX = cropX / img.width;
+    const escalaX = cropW / img.width;
+    precintoConvertido = {
+      y1: precintoIA.y1,
+      y2: precintoIA.y2,
+      x1: offsetX + (precintoIA.x1 * escalaX),
+      x2: offsetX + (precintoIA.x2 * escalaX)
+    };
   }
 
   return {
-    placa,
-    precinto,
-    error: (!placa || !precinto) ? 'No se localizaron ambas zonas con suficiente seguridad' : null
+    placa: placa,
+    precinto: precintoConvertido,
+    error: (!placa || !precintoConvertido) ? 'Falta localizar una de las zonas' : null
   };
 }
 
@@ -2838,51 +2832,33 @@ function mostrarRecortesPrueba() {
 function capturarDesdeVisor() {
   const video = document.getElementById('visor-video');
   const vw = video.videoWidth, vh = video.videoHeight;
-
+  
   if (!vw || !vh) {
     showToast('La cámara aún no está lista');
     return;
   }
-
+  
   if (siguienteSlot >= 12) {
     cerrarVisor();
     return;
   }
 
-  // La captura solamente continúa cuando ambas zonas
-  // han sido detectadas dinámicamente.
   const placa = zonasVisorActuales.placa;
   const precinto = zonasVisorActuales.precinto;
 
-  if (!placa || !precinto || zonasVisorEstabilidad.placa < DETECCION_MINIMA_ESTABLE || zonasVisorEstabilidad.precinto < DETECCION_MINIMA_ESTABLE) {
-    showToast('⚠️ Espera a que aparezcan la placa y el precinto');
+  if (!placa || !precinto) {
+    showToast('⚠️ Espera a que la IA encuadre la placa y el precinto');
     return;
   }
 
   const canvas = document.createElement('canvas');
   canvas.width = vw;
   canvas.height = vh;
+  canvas.getContext('2d').drawImage(video, 0, 0, vw, vh);
 
-  canvas.getContext('2d').drawImage(
-    video,
-    0,
-    0,
-    vw,
-    vh
-  );
-
-  // Recortes usando las coordenadas DINÁMICAS detectadas.
   ultimosRecortes = {
-    placa: recortarZonaDinamica(
-      canvas,
-      placa,
-      MARGEN_PLACA
-    ),
-    precinto: recortarZonaDinamica(
-      canvas,
-      precinto,
-      MARGEN_PRECINTO
-    )
+    placa: recortarZonaDinamica(canvas, placa, MARGEN_PLACA),
+    precinto: recortarZonaDinamica(canvas, precinto, MARGEN_PRECINTO)
   };
 
   if (!ultimosRecortes.placa || !ultimosRecortes.precinto) {
@@ -2891,57 +2867,37 @@ function capturarDesdeVisor() {
   }
 
   const recortesCaptura = ultimosRecortes;
-
-  // La captura fue realizada: ambos cuadros pasan de AMARILLO a VERDE.
+  
   zonasVisorCapturadas.placa = true;
   zonasVisorCapturadas.precinto = true;
   actualizarEstadoGuias();
-  setEstadoVisor('Placa y precinto capturados ✓', 'ok');
+  setEstadoVisor('Captura exitosa ✓', 'ok');
   detenerDetectorVisor();
+
+  const caja = document.getElementById('visor-caja');
+  caja.style.opacity = '0.3';
+  setTimeout(() => { caja.style.opacity = '1'; }, 120);
 
   if (MOSTRAR_RECORTES_PRUEBA) {
     mostrarRecortesPrueba();
   }
 
-  // Destello para confirmar la captura.
-  const caja = document.getElementById('visor-caja');
-  caja.style.opacity = '0.3';
-
-  setTimeout(() => {
-    caja.style.opacity = '1';
-  }, 120);
-
-  // Entrega la foto completa al flujo actual,
-  // junto con los recortes dinámicos.
   canvas.toBlob((blob) => {
     if (!blob) {
       showToast('No se pudo capturar la foto');
       return;
     }
-
-    const file = new File(
-      [blob],
-      'captura.jpg',
-      { type: 'image/jpeg' }
-    );
-
-    procesarFoto({
-      files: [file],
-      value: '',
-      recortes: recortesCaptura
-    });
-
+    const file = new File([blob], 'captura.jpg', { type: 'image/jpeg' });
+    
+    procesarFoto({ files: [file], value: '', recortes: recortesCaptura });
     actualizarContadorVisor();
 
     if (siguienteSlot >= 12) {
       setTimeout(() => cerrarVisor(), 700);
     } else {
-      // Para el siguiente medidor, volvemos a amarillo y buscamos nuevas coordenadas.
-      setTimeout(() => {
-        if (visorStream) iniciarDetectorVisor();
-      }, 650);
+      setTimeout(() => { if (visorStream) iniciarDetectorVisor(); }, 650);
     }
-  }, 'image/jpeg', 0.92);
+  }, 'image/jpeg', 0.95);
 }
 
 
