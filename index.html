@@ -1657,35 +1657,20 @@ async function analizarSlot(slot, original, recortesVisor) {
   const tiempoInicio = Date.now();
   let imgOptimizada = null;
   try {
-    imgOptimizada = await redimensionarImagen(original, 1024);
+    imgOptimizada = await redimensionarImagen(original, 900);
     const base64 = imgOptimizada.split(',')[1];
     const claves = obtenerClaves(slot);
 
-    let rec64 = null;
-    if (recortesVisor) {
-      const [rp, rpr] = await Promise.all([redimensionarImagen(recortesVisor.placa, 1000), redimensionarImagen(recortesVisor.precinto, 480)]);
-      rec64 = { placa: rp.split(',')[1], precinto: rpr.split(',')[1] };
-    }
+    const partes = [
+      { inline_data: { mime_type: 'image/jpeg', data: base64 } },
+      { text: PROMPT }
+    ];
 
-    const leer = async (extra, temp, completa, rondas = 3) => {
-      const r = await llamarGemini({ modelo: MODELO_IA, partes: construirPartes(rec64, base64, extra, completa), temp, maxTokens: 600, claves, rondas });
-      if (r.json) r.json = normalizarLectura(r.json);
-      return r;
-    };
+    await new Promise(r => setTimeout(r, 1000));
 
-    let r = await leer('', 0, false, rec64 ? 1 : 3);
-    if (!r.json && rec64) { rec64 = null; r = await leer('', 0, false); }
+    const r = await llamarGemini({ modelo: MODELO_IA, partes, temp: 0, maxTokens: 500, claves, rondas: 3 });
     let datos = r.json || null;
     const motivo = r.error || '';
-
-    if (datos) {
-      const dudosos = detectarCamposDudosos(datos);
-      if (dudosos.length > 0) {
-        const pista = `\n\nATENCIÓN: en una lectura previa estos campos no cumplieron el formato esperado: ${dudosos.join(', ')}. Revisa la imagen con más cuidado y respeta los formatos indicados.`;
-        const r2 = await leer(pista, 0.3, true);
-        if (r2.json && detectarCamposDudosos(r2.json).length < dudosos.length) datos = r2.json;
-      }
-    }
 
     if (datos) {
       if (!datos.marca) datos.marca = 'METREX';
