@@ -2178,14 +2178,22 @@ function recortarZonaDinamica(canvasOrigen, caja, margen = 0) {
   const x2 = Math.min(1, caja.x2 + bw * margen);
   const y1 = Math.max(0, caja.y1 - bh * margen);
   const y2 = Math.min(1, caja.y2 + bh * margen);
+  
   const sx = Math.round(x1 * canvasOrigen.width);
   const sy = Math.round(y1 * canvasOrigen.height);
   const sw = Math.max(1, Math.round((x2 - x1) * canvasOrigen.width));
   const sh = Math.max(1, Math.round((y2 - y1) * canvasOrigen.height));
+  
   const c = document.createElement('canvas');
-  c.width = sw; c.height = sh;
-  c.getContext('2d').drawImage(canvasOrigen, sx, sy, sw, sh, 0, 0, sw, sh);
-  return c.toDataURL('image/jpeg', 0.95);
+  c.width = 800; 
+  c.height = Math.round(800 * (sh / sw));
+  
+  const ctx = c.getContext('2d');
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(canvasOrigen, sx, sy, sw, sh, 0, 0, c.width, c.height);
+  
+  return c.toDataURL('image/jpeg', 0.90);
 }
 
 function capturarFijo() {
@@ -2196,9 +2204,9 @@ function capturarFijo() {
 
   const canvas = document.createElement('canvas');
   canvas.width = vw; canvas.height = vh;
-  canvas.getContext('2d').drawImage(video, 0, 0, vw, vh);
+  const ctx = canvas.getContext('2d');
+  ctx.drawImage(video, 0, 0, vw, vh);
 
-  // Coordenadas fijas optimizadas para la placa (arriba) y el precinto (derecha)
   const cajaPlaca = { x1: 0.10, y1: 0.15, x2: 0.90, y2: 0.50 };
   const cajaPrecinto = { x1: 0.65, y1: 0.55, x2: 0.90, y2: 0.80 };
 
@@ -2208,8 +2216,8 @@ function capturarFijo() {
   };
 
   const caja = document.getElementById('visor-caja');
-  caja.style.opacity = '0.3';
-  setTimeout(() => { caja.style.opacity = '1'; }, 120);
+  caja.style.opacity = '0.2';
+  setTimeout(() => { caja.style.opacity = '1'; }, 100);
 
   detenerAutoCaptura();
 
@@ -2226,9 +2234,9 @@ function capturarFijo() {
       setTimeout(() => { 
         document.querySelectorAll('.visor-guia-fija').forEach(el => el.classList.remove('estable'));
         if (visorStream) iniciarAutoCaptura(); 
-      }, 1000);
+      }, 800);
     }
-  }, 'image/jpeg', 0.95);
+  }, 'image/jpeg', 0.90);
 }
 
 // GENERAR EXCEL + ZIP
