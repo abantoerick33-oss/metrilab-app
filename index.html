@@ -814,20 +814,31 @@
     #jefe-panel .med-precinto-col { display: none; }
   }
 
-  /* ===== VISOR DE CÁMARA ===== */
+  /* ===== VISOR DE CÁMARA (GUÍAS FIJAS CON AUTO-DISPARO) ===== */
   #visor { position: fixed; inset: 0; background: #000; z-index: 990; flex-direction: column; align-items: center; justify-content: center; padding: 44px 0 110px; }
   .visor-top { position: absolute; top: 0; left: 0; right: 0; height: 44px; display: flex; align-items: center; justify-content: space-between; padding: 0 14px; color: #fff; font-size: 12px; }
   #visor-contador { font-weight: 700; color: #FACC15; font-size: 14px; }
   .visor-hint { color: rgba(255,255,255,0.7); }
   #visor-caja { position: relative; background: #000; transition: opacity 0.12s; }
   #visor-video { width: 100%; height: 100%; display: block; }
-  .visor-guia { position: absolute; border: 3px solid #FACC15; border-radius: 7px; box-shadow: 0 0 12px rgba(250,204,21,0.65), inset 0 0 8px rgba(250,204,21,0.12); pointer-events: none; transition: left 0.18s ease-out, top 0.18s ease-out, width 0.18s ease-out, height 0.18s ease-out, border-color 0.18s ease, box-shadow 0.18s ease; animation: visorGuiaPulso 1.15s ease-in-out infinite; }
-  .visor-guia.detectada { border-color: #FACC15; box-shadow: 0 0 14px rgba(250,204,21,0.75), inset 0 0 8px rgba(250,204,21,0.14); }
-  .visor-guia.capturada { border-color: #22C55E; box-shadow: 0 0 16px rgba(34,197,94,0.9), inset 0 0 10px rgba(34,197,94,0.16); animation: none; }
-  .visor-guia.no-detectada { border-color: #FACC15; opacity: 0.28; }
-  .visor-guia span { position: absolute; top: 3px; left: 6px; font-size: 10px; font-weight: 800; color: #FACC15; letter-spacing: 1px; text-shadow: 0 0 4px #000, 0 1px 2px #000; white-space: nowrap; }
-  .visor-guia.capturada span { color: #22C55E; }
-  @keyframes visorGuiaPulso { 0%,100% { opacity: 0.78; } 50% { opacity: 1; } }
+  
+  .visor-guia-fija { 
+    position: absolute; border: 3px dashed #00D4FF; border-radius: 8px; 
+    background: rgba(0,212,255,0.05); pointer-events: none; 
+    transition: border-color 0.3s, background 0.3s; 
+  }
+  .visor-guia-fija span { 
+    position: absolute; top: 6px; left: 8px; font-size: 11px; 
+    font-weight: 800; color: #00D4FF; text-shadow: 0 1px 3px #000; 
+  }
+  .visor-guia-fija.estable { 
+    border-color: #22C55E; background: rgba(34,197,94,0.15); box-shadow: 0 0 15px rgba(34,197,94,0.5);
+  }
+  .visor-guia-fija.estable span { color: #22C55E; }
+  
+  #guia-fija-placa { top: 15%; left: 10%; width: 80%; height: 35%; }
+  #guia-fija-precinto { top: 55%; left: 65%; width: 25%; height: 25%; }
+
   .visor-estado { position: absolute; top: 45px; left: 50%; transform: translateX(-50%); z-index: 3; display: flex; align-items: center; gap: 7px; padding: 6px 11px; border-radius: 999px; background: rgba(0,0,0,0.68); border: 1px solid rgba(250,204,21,0.45); color: #FACC15; font-size: 11px; font-weight: 700; letter-spacing: 0.2px; backdrop-filter: blur(5px); white-space: nowrap; }
   .visor-estado::before { content: ''; width: 8px; height: 8px; border-radius: 50%; background: #FACC15; box-shadow: 0 0 8px rgba(250,204,21,0.9); animation: visorEstadoPulso 0.9s ease-in-out infinite; }
   .visor-estado.ok { color: #22C55E; border-color: rgba(34,197,94,0.5); }
@@ -1098,21 +1109,24 @@
   </nav>
 </div>
 
+<!-- VISOR CON GUÍAS FIJAS Y AUTO-DISPARO POR ESTABILIDAD -->
 <div id="visor" style="display:none">
   <div class="visor-top">
     <span id="visor-contador">0 / 12</span>
-    <span class="visor-hint">Encaja la placa y el precinto en los cuadros</span>
+    <span class="visor-hint">Encaja el medidor y mantén el celular quieto</span>
   </div>
   <div id="visor-caja">
     <video id="visor-video" autoplay playsinline muted></video>
-    <div class="visor-estado" id="visor-estado">Analizando cámara...</div>
-    <div class="visor-guia" id="guia-placa"><span>PLACA</span></div>
-    <div class="visor-guia" id="guia-precinto"><span>PRECINTO</span></div>
+    <div class="visor-estado" id="visor-estado">Iniciando cámara...</div>
+    
+    <div id="guia-fija-placa" class="visor-guia-fija"><span>PLACA</span></div>
+    <div id="guia-fija-precinto" class="visor-guia-fija"><span>PRECINTO</span></div>
+    
     <div id="visor-prueba"></div>
   </div>
   <div class="visor-botones">
-    <button class="visor-cerrar" onclick="cerrarVisor()">✕ Listo</button>
-    <button class="visor-disparo" onclick="capturarDesdeVisor()"></button>
+    <button class="visor-cerrar" onclick="cerrarVisor()">✕ Cancelar</button>
+    <button class="visor-disparo" onclick="capturarFijo()"></button>
     <div style="width:80px"></div>
   </div>
 </div>
@@ -1237,168 +1251,7 @@ EJEMPLO DE RESPUESTA CORRECTA (para un medidor que muestra "00123,422"):
 
 Si algún campo no es visible o legible, usa null. Devuelve SOLO el JSON, sin markdown, sin explicaciones.`;
 
-// Modelo de IA: cámbialo aquí para comparar velocidad (ej: 'gemini-2.5-flash-lite')
 const MODELO_IA = 'gemini-2.5-flash';
-
-// MODO_RECORTE: 'auto' (la IA ubica placa y precinto), 'guias' (cuadros fijos del visor) o 'completa' (foto completa)
-const MODO_RECORTE = 'auto';
-const MODELO_UBICAR = 'gemini-2.5-flash'; // usamos Flash para mejorar la localización visual
-const MARGEN_PLACA = 0.08;
-const MARGEN_PRECINTO = 0.25;
-
-const PROMPT_UBICAR = `
-ERES UN SISTEMA DE DETECCIÓN VISUAL ESPECIALIZADO EN MEDIDORES DE GAS.
-
-Analiza ÚNICAMENTE la imagen ACTUAL recibida desde la cámara.
-Tu objetivo es localizar exactamente DOS OBJETOS FÍSICOS REALES:
-
-1. PLACA DEL MEDIDOR
-2. PRECINTO DE SEGURIDAD
-
-NO uses posiciones fijas y NO reutilices coordenadas de imágenes anteriores.
-El medidor puede moverse, girar, acercarse, alejarse o cambiar de posición.
-Las coordenadas deben calcularse nuevamente para cada imagen.
-
-========================================================
-PLACA
-========================================================
-
-La PLACA es la pieza rectangular frontal, normalmente ubicada en la parte
-superior/frontal del medidor. Es la superficie donde aparecen datos como:
-- METREX u otra marca
-- números del contador
-- código de barras
-- G1.6 / G2.5
-- Qmax / Qmin
-- año
-- número de serie
-- información técnica
-
-DEBES ENCERRAR TODA LA PLACA VISIBLE.
-
-NO marques solamente los números.
-NO marques solamente la ventana del contador.
-NO marques solamente el código de barras.
-NO marques todo el cuerpo del medidor.
-NO marques una etiqueta pequeña como si fuera la placa.
-
-La caja debe cubrir los bordes físicos visibles de la placa rectangular.
-
-========================================================
-PRECINTO
-========================================================
-
-El PRECINTO es un PEQUEÑO DISPOSITIVO FÍSICO DE SEGURIDAD instalado en
-el lado derecho/lateral del medidor y normalmente asociado a un alambre.
-
-En la imagen de referencia, el precinto se encuentra aproximadamente
-hacia el lado DERECHO del medidor, cerca de la zona inferior/derecha
-de la placa.
-
-IMPORTANTE: esta ubicación es solamente una referencia visual.
-NO uses coordenadas fijas. Debes seguir la posición REAL del precinto
-en la imagen actual.
-
-El alambre NO es el precinto.
-La cinta de papel NO es el precinto.
-El sticker morado NO es el precinto.
-Una etiqueta NO es el precinto.
-Un tornillo NO es el precinto.
-Una sombra o reflejo NO es el precinto.
-
-Busca específicamente el pequeño dispositivo físico que está asociado
-al alambre. La caja debe rodear EL DISPOSITIVO DEL PRECINTO y no todo
-el alambre.
-
-El precinto puede ser MUY PEQUEÑO respecto al medidor.
-NO lo descartes por su tamaño.
-NO hagas una caja grande sobre toda la zona derecha.
-Haz una caja ajustada al objeto físico visible.
-
-Si el precinto está parcialmente oculto por el alambre, detecta la parte
-visible del dispositivo si existe evidencia suficiente.
-
-========================================================
-REGLA ESPECIAL PARA EVITAR FALSOS POSITIVOS
-========================================================
-
-Es preferible devolver null antes que marcar un objeto incorrecto.
-
-Si ves una cinta de papel pero no ves el dispositivo de seguridad:
-"precinto": null
-
-Si ves únicamente un alambre pero no puedes distinguir el dispositivo:
-"precinto": null
-
-NO conviertas automáticamente cualquier objeto pequeño del lado derecho
-en un precinto.
-
-========================================================
-ANÁLISIS PASO A PASO
-========================================================
-
-1. Identifica primero el medidor completo y su orientación.
-2. Localiza la placa rectangular.
-3. Examina cuidadosamente el lado derecho/lateral del medidor.
-4. Busca el pequeño dispositivo físico conectado al alambre.
-5. Comprueba que no sea cinta, sticker, texto, tornillo o reflejo.
-6. Calcula las coordenadas reales de ambos objetos en ESTA imagen.
-
-========================================================
-FORMATO OBLIGATORIO
-========================================================
-
-Devuelve ÚNICAMENTE JSON válido.
-NO escribas explicaciones.
-NO escribas Markdown.
-NO agregues texto antes ni después del JSON.
-
-Formato EXACTO:
-{
-  "placa": [ymin, xmin, ymax, xmax],
-  "precinto": [ymin, xmin, ymax, xmax]
-}
-
-Las coordenadas son enteros entre 0 y 1000.
-
-El orden obligatorio es:
-[ymin, xmin, ymax, xmax]
-
-0,0 = esquina superior izquierda.
-1000,1000 = esquina inferior derecha.
-
-NO utilices [x,y,width,height].
-NO utilices píxeles.
-NO utilices coordenadas fijas.
-
-========================================================
-VERIFICACIÓN FINAL
-========================================================
-
-Antes de responder verifica:
-
-PLACA:
-- ¿La caja cubre la placa rectangular completa?
-- ¿No estoy marcando solo el texto o contador?
-- ¿No estoy marcando todo el medidor?
-
-PRECINTO:
-- ¿La caja está sobre el pequeño dispositivo físico?
-- ¿Está relacionado con el alambre?
-- ¿No estoy marcando solamente el alambre?
-- ¿No estoy marcando la cinta de papel?
-- ¿No estoy marcando el sticker morado?
-- ¿La caja es pequeña y ajustada al precinto?
-
-COORDENADAS:
-- ¿ymin < ymax?
-- ¿xmin < xmax?
-- ¿Todas están entre 0 y 1000?
-- ¿Corresponden a la imagen ACTUAL?
-
-Si un objeto no puede identificarse con seguridad, usa null para ese objeto.
-`;
-
 const PROMPT_RECORTES = `Lee estas imágenes de un medidor de gas. Imagen 1: placa frontal con el contador y los datos impresos. Imagen 2: precinto de seguridad.
 
 Devuelve SOLO un objeto JSON con este esquema exacto, sin texto adicional:
@@ -1438,7 +1291,6 @@ function cargarTema() {
   if (btn) btn.textContent = tema === 'dark' ? '🌙' : '☀️';
 }
 
-// BIENVENIDA -> LOGIN
 function mostrarLogin() {
   document.getElementById('setup-screen').style.display = 'none';
   document.getElementById('login-screen').style.display = 'flex';
@@ -1467,7 +1319,6 @@ function cambiarClaves() {
   showToast('Claves actualizadas correctamente');
 }
 
-// UTILIDADES
 function getFecha() {
   return new Date().toLocaleString('es-PE', {timeZone:'America/Lima', hour12:false}).replace(',','');
 }
@@ -1487,12 +1338,6 @@ function getLote() {
   contadorLoteDia[fechaISO]++;
   localStorage.setItem('metrilab_contador', JSON.stringify(contadorLoteDia));
   return `QV${contadorLoteDia[fechaISO]}-VP-${fechaISO}`;
-}
-
-function getLoteSinIncrementar() {
-  const fechaISO = getFechaISO();
-  const num = (contadorLoteDia[fechaISO] || 0) + 1;
-  return `QV${num}-VP-${fechaISO}`;
 }
 
 function construirCodigoLote(numeroManual) {
@@ -1633,7 +1478,6 @@ function actualizarAdmin() {
   document.getElementById('admin-lotes-marco').textContent = `${activos.filter(l=>l.operario.includes('Marco')).length} lotes`;
 }
 
-// OPTIMIZACIÓN DE IMAGEN
 async function redimensionarImagen(dataUrl, maxAncho = 1024) {
   return new Promise((resolve) => {
     const img = new Image();
@@ -1651,26 +1495,18 @@ async function redimensionarImagen(dataUrl, maxAncho = 1024) {
   });
 }
 
-// VALIDACIÓN
 function validarCampos(datos) {
   const faltantes = [];
   CAMPOS_REQUERIDOS.forEach(campo => {
     if (!datos[campo] || datos[campo] === null || datos[campo] === '') {
-      // no incluir serie_precinto como faltante crítico (puede ser N/D)
       if (campo !== 'serie_precinto') faltantes.push(campo);
     }
   });
   return faltantes;
 }
 
-// DETECCIÓN DE ANOMALÍAS
-function detectarAnomalia() {
-  // Ya no se usa el tiempo de respuesta como señal de alerta:
-  // con procesamiento en paralelo, ser rápido ya no significa que se hizo mal.
-  return null;
-}
+function detectarAnomalia() { return null; }
 
-// Crea el lote en Firebase si es la primera foto, o actualiza el medidor si ya existe
 async function sincronizarMedidorConFirebase(slot, datos) {
   if (!loteFirebaseId) {
     if (!creandoLotePromise) {
@@ -1695,7 +1531,6 @@ async function sincronizarMedidorConFirebase(slot, datos) {
   });
 }
 
-// DETECTAR CAMPOS DUDOSOS EN LA LECTURA DE LA IA
 function detectarCamposDudosos(d) {
   if (!d) return ['serie_precinto', 'registro', 'anio_medidor'];
   const dudosos = [];
@@ -1707,7 +1542,6 @@ function detectarCamposDudosos(d) {
   return dudosos;
 }
 
-// ===== LLAMADAS A GEMINI: cola, reintentos y diagnóstico =====
 let _geminiActivas = 0;
 const _geminiEspera = [];
 const MAX_GEMINI_SIMULTANEAS = 3;
@@ -1737,7 +1571,6 @@ async function unaLlamada(modelo, key, partes, temp, maxTokens) {
       body: JSON.stringify({ contents: [{parts: partes}], generationConfig: cfg })
     });
     let resp = await enviar({ temperature: temp, maxOutputTokens: maxTokens, responseMimeType: 'application/json', thinkingConfig: { thinkingBudget: 0 } });
-    // Si la API rechaza esa configuración (400), se reintenta con una configuración mínima
     if (resp.status === 400) resp = await enviar({ temperature: temp, maxOutputTokens: Math.max(maxTokens, 2048) });
     if (resp.status === 429) return { tipo: 'cuota', motivo: 'cuota de IA agotada (429)' };
     let data = null;
@@ -1765,7 +1598,6 @@ async function unaLlamada(modelo, key, partes, temp, maxTokens) {
   }
 }
 
-// Rota las claves y reintenta con pausa si hay cuota agotada o la IA está ocupada. Devuelve {json} o {error}
 async function llamarGemini({ modelo, partes, temp = 0, maxTokens = 300, claves, rondas = 3 }) {
   if (!claves.length) return { error: 'no hay claves API (configúralas en Admin)' };
   let motivo = 'sin respuesta';
@@ -1784,7 +1616,6 @@ async function llamarGemini({ modelo, partes, temp = 0, maxTokens = 300, claves,
   return { error: motivo };
 }
 
-// Limpia y corrige formatos de lo que devuelve la IA
 function normalizarLectura(j) {
   if (!j || typeof j !== 'object') return null;
   const o = {};
@@ -1799,7 +1630,6 @@ function normalizarLectura(j) {
   return o;
 }
 
-// ===== MODO AUTOMÁTICO: LA IA UBICA LA PLACA Y EL PRECINTO =====
 function obtenerClaves(slot) {
   const todas = [
     localStorage.getItem('metrilab_key'),
@@ -1810,151 +1640,6 @@ function obtenerClaves(slot) {
   return [...todas.slice(inicio), ...todas.slice(0, inicio)];
 }
 
-function cajaDesdeIA(c, tipo = '') {
-  if (!Array.isArray(c) || c.length !== 4) return null;
-
-  const [y1, x1, y2, x2] = c.map(n => Number(n) / 1000);
-
-  if ([y1, x1, y2, x2].some(n => !Number.isFinite(n) || n < 0 || n > 1)) {
-    return null;
-  }
-
-  if (y2 <= y1 || x2 <= x1) return null;
-
-  const ancho = x2 - x1;
-  const alto = y2 - y1;
-
-  if (tipo === 'placa' && (ancho < 0.05 || alto < 0.03)) return null;
-  if (tipo === 'precinto' && (ancho < 0.005 || alto < 0.005)) return null;
-
-  return { y1, x1, y2, x2 };
-}
-
-async function ubicarZonas(dataUrlPeq, claves) {
-  const img = new Image();
-  await new Promise(resolve => {
-    img.onload = resolve;
-    img.src = dataUrlPeq;
-  });
-
-  const cropX = Math.floor(img.width * 0.45);
-  const cropY = 0;
-  const cropW = img.width - cropX;
-  const cropH = img.height;
-
-  const canvasDerecha = document.createElement('canvas');
-  canvasDerecha.width = cropW;
-  canvasDerecha.height = cropH;
-  canvasDerecha.getContext('2d').drawImage(img, cropX, cropY, cropW, cropH, 0, 0, cropW, cropH);
-  const dataUrlDerecha = canvasDerecha.toDataURL('image/jpeg', 0.95);
-
-  const partes = [
-    { inline_data: { mime_type: 'image/jpeg', data: dataUrlPeq.split(',')[1] } },
-    { inline_data: { mime_type: 'image/jpeg', data: dataUrlDerecha.split(',')[1] } },
-    { text: PROMPT_UBICAR }
-  ];
-
-  let r = await llamarGemini({
-    modelo: MODELO_UBICAR,
-    partes,
-    maxTokens: 180,
-    claves,
-    rondas: 1
-  });
-
-  if (!r.json) {
-    return {
-      placa: null,
-      precinto: null,
-      error: r.error || 'La IA no devolvió una detección válida'
-    };
-  }
-
-  let placa = cajaDesdeIA(r.json.placa, 'placa');
-  let precintoIA = cajaDesdeIA(r.json.precinto, 'precinto');
-  let precintoConvertido = null;
-
-  if (precintoIA) {
-    const offsetX = cropX / img.width;
-    const escalaX = cropW / img.width;
-    precintoConvertido = {
-      y1: precintoIA.y1,
-      y2: precintoIA.y2,
-      x1: offsetX + (precintoIA.x1 * escalaX),
-      x2: offsetX + (precintoIA.x2 * escalaX)
-    };
-  }
-
-  return {
-    placa: placa,
-    precinto: precintoConvertido,
-    error: (!placa || !precintoConvertido) ? 'Falta localizar una de las zonas' : null
-  };
-}
-
-function recortarConMargen(dataUrlOriginal, caja, margen) {
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    img.onload = () => {
-      const bw = caja.x2 - caja.x1, bh = caja.y2 - caja.y1;
-      const x1 = Math.max(0, caja.x1 - bw * margen), x2 = Math.min(1, caja.x2 + bw * margen);
-      const y1 = Math.max(0, caja.y1 - bh * margen), y2 = Math.min(1, caja.y2 + bh * margen);
-      const sx = Math.round(x1 * img.width), sy = Math.round(y1 * img.height);
-      const sw = Math.max(1, Math.round((x2 - x1) * img.width)), sh = Math.max(1, Math.round((y2 - y1) * img.height));
-      const c = document.createElement('canvas');
-      c.width = sw; c.height = sh;
-      c.getContext('2d').drawImage(img, sx, sy, sw, sh, 0, 0, sw, sh);
-      resolve({ url: c.toDataURL('image/jpeg', 0.92), caja: { x1, y1, x2, y2 } });
-    };
-    img.onerror = () => reject(new Error('no se pudo recortar'));
-    img.src = dataUrlOriginal;
-  });
-}
-
-function mostrarZonasVerdes(dataUrlPeq, cajaPlaca, cajaPrecinto, slot) {
-  const img = new Image();
-  img.onload = () => {
-    const c = document.createElement('canvas');
-    c.width = img.width; c.height = img.height;
-    const ctx = c.getContext('2d');
-    ctx.drawImage(img, 0, 0);
-    ctx.lineWidth = Math.max(3, img.width / 160);
-    ctx.strokeStyle = '#22C55E';
-    [cajaPlaca, cajaPrecinto].forEach(b => ctx.strokeRect(b.x1 * c.width, b.y1 * c.height, (b.x2 - b.x1) * c.width, (b.y2 - b.y1) * c.height));
-    let el = document.getElementById('zonas-preview');
-    if (!el) {
-      el = document.createElement('div');
-      el.id = 'zonas-preview';
-      el.style.cssText = 'position:fixed;bottom:130px;left:8px;z-index:995;background:rgba(0,0,0,0.7);padding:6px;border-radius:8px;display:none';
-      document.body.appendChild(el);
-    }
-    el.innerHTML = `<div style="color:#22C55E;font-size:10px;font-weight:700;margin-bottom:3px">#${slot + 1} zonas encontradas</div><img src="${c.toDataURL('image/jpeg', 0.8)}" style="width:150px;display:block;border-radius:4px">`;
-    el.style.display = 'block';
-    clearTimeout(window._timerZonas);
-    window._timerZonas = setTimeout(() => { el.style.display = 'none'; }, 4000);
-  };
-  img.src = dataUrlPeq;
-}
-
-// Devuelve {placa, precinto} (recortes) o null si la IA no encontró las dos zonas
-async function prepararRecortesAuto(original, slot, claves) {
-  try {
-    const peq = await redimensionarImagen(original, 640);
-    const zonas = await ubicarZonas(peq, claves);
-    if (!zonas || !zonas.placa || !zonas.precinto) return null;
-    const [rp, rpr] = await Promise.all([
-      recortarConMargen(original, zonas.placa, MARGEN_PLACA),
-      recortarConMargen(original, zonas.precinto, MARGEN_PRECINTO)
-    ]);
-    mostrarZonasVerdes(peq, rp.caja, rpr.caja, slot);
-    return { placa: rp.url, precinto: rpr.url };
-  } catch (err) {
-    console.error('Modo automático falló, se usa la foto completa:', err);
-    return null;
-  }
-}
-
-// Arma las imágenes a enviar: recortes (si hay) o foto completa
 function construirPartes(rec64, base64Completa, extra, completa) {
   const img = d => ({inline_data: {mime_type: 'image/jpeg', data: d}});
   if (!rec64) return [img(base64Completa), {text: PROMPT + extra}];
@@ -1968,7 +1653,6 @@ function construirPartes(rec64, base64Completa, extra, completa) {
   return partes;
 }
 
-// Analiza UNA foto: ubica zonas, lee, valida, reintenta y guarda el resultado en su casilla
 async function analizarSlot(slot, original, recortesVisor) {
   const tiempoInicio = Date.now();
   let imgOptimizada = null;
@@ -1977,12 +1661,9 @@ async function analizarSlot(slot, original, recortesVisor) {
     const base64 = imgOptimizada.split(',')[1];
     const claves = obtenerClaves(slot);
 
-    let recortes = recortesVisor || null;
-    if (!recortes && MODO_RECORTE === 'auto') recortes = await prepararRecortesAuto(original, slot, claves);
-
     let rec64 = null;
-    if (recortes) {
-      const [rp, rpr] = await Promise.all([redimensionarImagen(recortes.placa, 1000), redimensionarImagen(recortes.precinto, 480)]);
+    if (recortesVisor) {
+      const [rp, rpr] = await Promise.all([redimensionarImagen(recortesVisor.placa, 1000), redimensionarImagen(recortesVisor.precinto, 480)]);
       rec64 = { placa: rp.split(',')[1], precinto: rpr.split(',')[1] };
     }
 
@@ -1993,14 +1674,14 @@ async function analizarSlot(slot, original, recortesVisor) {
     };
 
     let r = await leer('', 0, false, rec64 ? 1 : 3);
-    if (!r.json && rec64) { rec64 = null; r = await leer('', 0, false); } // si falló con recortes, prueba con la foto completa
+    if (!r.json && rec64) { rec64 = null; r = await leer('', 0, false); }
     let datos = r.json || null;
     const motivo = r.error || '';
 
     if (datos) {
       const dudosos = detectarCamposDudosos(datos);
       if (dudosos.length > 0) {
-        const pista = `\n\nATENCIÓN: en una lectura previa estos campos no cumplieron el formato esperado: ${dudosos.join(', ')}. Revisa la imagen con más cuidado (el precinto puede estar rotado) y respeta exactamente los formatos indicados.`;
+        const pista = `\n\nATENCIÓN: en una lectura previa estos campos no cumplieron el formato esperado: ${dudosos.join(', ')}. Revisa la imagen con más cuidado y respeta los formatos indicados.`;
         const r2 = await leer(pista, 0.3, true);
         if (r2.json && detectarCamposDudosos(r2.json).length < dudosos.length) datos = r2.json;
       }
@@ -2017,15 +1698,14 @@ async function analizarSlot(slot, original, recortesVisor) {
       fotosActual[slot] = imgOptimizada;
       tiemposProcesamiento[slot] = Date.now() - tiempoInicio;
       sincronizarMedidorConFirebase(slot, datos);
-      const anomalia = detectarAnomalia();
-      document.getElementById('warning-anomaly-container').innerHTML = anomalia ? `<div class="warning-anomaly">${anomalia}</div>` : '';
+      document.getElementById('warning-anomaly-container').innerHTML = '';
     } else {
       loteActual[slot] = { error: true, motivo: (motivo || 'sin respuesta de la IA').replace(/[<>]/g, '') };
       fotosActual[slot] = imgOptimizada;
     }
   } catch (err) {
     console.error('Error procesando la foto:', err);
-    loteActual[slot] = { error: true, motivo: ('error interno: ' + (err && err.message ? err.message : err)).replace(/[<>]/g, '') };
+    loteActual[slot] = { error: true, motivo: ('error interno: ' + err).replace(/[<>]/g, '') };
     fotosActual[slot] = imgOptimizada || original;
   }
   document.getElementById('seccion-observaciones').style.display = 'block';
@@ -2035,13 +1715,12 @@ async function analizarSlot(slot, original, recortesVisor) {
 
 function reintentarLectura(i) {
   const foto = fotosActual[i];
-  if (!foto) { showToast('No hay foto guardada. Elimínala y toma otra.'); return; }
+  if (!foto) { showToast('No hay foto guardada.'); return; }
   loteActual[i] = { procesando: true };
   renderObservaciones();
   analizarSlot(i, foto, null);
 }
 
-// PROCESAR FOTO (en paralelo, respetando el orden de captura)
 async function procesarFoto(input) {
   if (!input.files[0]) return;
   if (siguienteSlot === 0 && !loteEnEdicion && !loteManualIngresado) {
@@ -2052,7 +1731,7 @@ async function procesarFoto(input) {
   if (siguienteSlot >= 12) { showToast('Lote completo'); input.value = ''; return; }
   const file = input.files[0];
   const recortesVisor = input.recortes || null;
-  input.value = ''; // libera la cámara de inmediato para la siguiente foto
+  input.value = '';
 
   const slot = siguienteSlot;
   siguienteSlot++;
@@ -2075,7 +1754,6 @@ async function procesarFoto(input) {
   reader.readAsDataURL(file);
 }
 
-// RENDER OBSERVACIONES CON CAMPOS EXTRA
 function renderObservaciones() {
   const cont = document.getElementById('lista-observaciones');
   cont.innerHTML = loteActual.map((d, i) => {
@@ -2111,7 +1789,7 @@ function renderObservaciones() {
           <button class="btn-delete" onclick="eliminarMedidor(${i})">🗑️</button>
         </div>
       </div>
-      <div class="medidor-data">Serie: ${d.serie_medidor || 'FALTA'} · Año: ${d.anio_medidor || 'N/D'} · Registro inicial: ${d.registro || 'FALTA'} ${d.unidad || ''}${tiemposProcesamiento[i] ? ` · ⏱ ${(tiemposProcesamiento[i]/1000).toFixed(1)} s` : ''}</div>
+      <div class="medidor-data">Serie: ${d.serie_medidor || 'FALTA'} · Año: ${d.anio_medidor || 'N/D'} · Registro inicial: ${d.registro || 'FALTA'} ${d.unidad || ''}</div>
       ${camposFaltantes}
       ${dudosos.map(f => `
         <div class="field-manual">
@@ -2178,30 +1856,10 @@ function moverMedidor(idxActual, valorInput) {
   moverEnArray(registrosFinalesActual);
   moverEnArray(tiemposProcesamiento);
   renderObservaciones();
-  resincronizarOrdenConFirebase();
-}
-
-async function resincronizarOrdenConFirebase() {
-  if (!loteFirebaseId) return;
-  const nuevoMapa = {};
-  loteActual.forEach((d, i) => {
-    if (!d || d.procesando || d.error) return;
-    nuevoMapa[i] = {
-      serie_medidor: d.serie_medidor || '',
-      anio: d.anio_medidor || 'N/D',
-      registro: String(d.registro || '0'),
-      unidad: 'm³',
-      serie_precinto: d.serie_precinto || 'N/D',
-      estado: 'foto_tomada',
-      fecha_ultimo_cambio: new Date()
-    };
-  });
-  const ok = await window.reordenarMedidoresEnFirebase(loteFirebaseId, nuevoMapa);
-  if (!ok) showToast('⚠️ El reordenamiento no se sincronizó con el panel del jefe');
 }
 
 function eliminarMedidor(idx) {
-  if (loteActual.some(d => !d || d.procesando)) { showToast('Espera a que terminen de procesarse las fotos antes de eliminar'); return; }
+  if (loteActual.some(d => !d || d.procesando)) { showToast('Espera a que terminen de procesarse las fotos'); return; }
   if (!confirm(`¿Eliminar el medidor #${idx+1}?`)) return;
   loteActual.splice(idx, 1);
   fotosActual.splice(idx, 1);
@@ -2214,7 +1872,6 @@ function eliminarMedidor(idx) {
   if (loteActual.length === 0) {
     document.getElementById('resultado-actual').innerHTML = '';
     document.getElementById('seccion-observaciones').style.display = 'none';
-    document.getElementById('warning-anomaly-container').innerHTML = '';
   } else {
     renderObservaciones();
   }
@@ -2237,7 +1894,6 @@ function actualizarProgreso() {
   document.getElementById('progress-fill').style.width = `${(n/12)*100}%`;
 }
 
-// LOTES PENDIENTES (esperando resultado final)
 function guardarComoPendiente() {
   if (loteActual.length === 0) { showToast('No hay medidores'); return; }
   if (!observacionesActual.every(o => o !== "")) { showToast('Faltan observaciones'); return; }
@@ -2266,17 +1922,12 @@ function guardarComoPendiente() {
   loteFirebaseId = null;
   loteCodigoAsignado = null;
   creandoLotePromise = null;
-  document.getElementById('resultado-actual').innerHTML = '';
-  document.getElementById('warning-anomaly-container').innerHTML = '';
-  document.getElementById('lista-observaciones').innerHTML = '';
   document.getElementById('seccion-observaciones').style.display = 'none';
   document.getElementById('confirmar-check').checked = false;
-  document.getElementById('file-camara').value = '';
-  document.getElementById('file-galeria').value = '';
   actualizarProgreso();
   iniciarRegistro();
   actualizarBadgePendientes();
-  showToast(`⏸️ Lote ${lote} guardado como pendiente. Complétalo cuando tengas los resultados finales.`);
+  showToast(`⏸️ Lote ${lote} guardado como pendiente.`);
 }
 
 function actualizarBadgePendientes() {
@@ -2294,7 +1945,7 @@ function actualizarBadgePendientes() {
 function actualizarPendientes() {
   const cont = document.getElementById('pendientes-lista');
   if (lotesPendientes.length === 0) {
-    cont.innerHTML = `<div class="empty-state"><p>No hay lotes pendientes</p><span>Los lotes en espera de resultado final aparecerán aquí</span></div>`;
+    cont.innerHTML = `<div class="empty-state"><p>No hay lotes pendientes</p></div>`;
     return;
   }
   cont.innerHTML = [...lotesPendientes].sort((a, b) => a.horaInicio - b.horaInicio).map((p) => {
@@ -2342,7 +1993,7 @@ function completarPendiente(loteCodigo) {
 }
 
 function descartarPendiente(loteCodigo) {
-  if (!confirm(`¿Descartar el lote pendiente ${loteCodigo}? Esta acción no se puede deshacer.`)) return;
+  if (!confirm(`¿Descartar el lote pendiente ${loteCodigo}?`)) return;
   lotesPendientes = lotesPendientes.filter(p => p.lote !== loteCodigo);
   localStorage.setItem('metrilab_pendientes', JSON.stringify(lotesPendientes));
   actualizarBadgePendientes();
@@ -2356,93 +2007,49 @@ async function finalizarLote() {
   if (!registrosFinalesActual.every(r => r !== "")) { showToast('Faltan registros finales'); return; }
   if (!document.getElementById('confirmar-check').checked) { showToast('Confirma la supervisión'); return; }
   if (typeof window.guardarLoteEnFirebase !== 'function') {
-    showToast('⚠️ Aún está cargando la conexión con el panel del jefe. Espera 2-3 segundos e inténtalo de nuevo.');
-    return;
+    showToast('⚠️ Conectando con Firebase. Espera 2 segundos...'); return;
   }
 
   const operario = document.getElementById('operario-select').value;
   const lote = loteEnEdicion ? loteEnEdicion.lote : (loteCodigoAsignado || getLote());
   const fecha = loteEnEdicion ? loteEnEdicion.fecha : getFecha();
 
-  const datosLote = loteActual;
-  const datosFotos = fotosActual;
-  const datosObservaciones = observacionesActual;
-  const datosComentarios = comentariosActual;
-  const datosRegistrosFinales = registrosFinalesActual;
-
   showToast('☁️ Sincronizando con el panel del jefe...');
   let firebaseId = loteFirebaseId;
   try {
     if (firebaseId) {
-      await window.finalizarLoteEnFirebase(firebaseId, datosObservaciones, datosRegistrosFinales, datosLote);
+      await window.finalizarLoteEnFirebase(firebaseId, observacionesActual, registrosFinalesActual, loteActual);
     } else {
-      firebaseId = await window.guardarLoteEnFirebase(lote, operario, fecha, datosLote, datosObservaciones, datosRegistrosFinales);
+      firebaseId = await window.guardarLoteEnFirebase(lote, operario, fecha, loteActual, observacionesActual, registrosFinalesActual);
     }
-  } catch (e) {
-    console.error('Error inesperado sincronizando con Firebase:', e);
-  }
-  if (!firebaseId) {
-    showToast('⚠️ No se pudo sincronizar con el panel del jefe, pero el reporte se generará igual');
-  }
+  } catch (e) { console.error(e); }
 
-  const nuevoLote = {lote, fecha, operario, medidores: datosLote, observaciones: datosObservaciones, comentarios: datosComentarios, registrosFinales: datosRegistrosFinales, firebaseId: firebaseId || null, eliminado: false, motivo: null};
+  const nuevoLote = {lote, fecha, operario, medidores: loteActual, observaciones: observacionesActual, comentarios: comentariosActual, registrosFinales: registrosFinalesActual, firebaseId: firebaseId || null, eliminado: false, motivo: null};
   historial.push(nuevoLote);
   if (historial.length > MAX_HISTORIAL) historial = historial.slice(-MAX_HISTORIAL);
   localStorage.setItem('metrilab_historial', JSON.stringify(historial));
 
   showToast('✨ Generando reporte...');
-  await generarZIP(datosLote, datosFotos, datosObservaciones, datosComentarios, datosRegistrosFinales, operario, fecha, lote);
+  await generarZIP(loteActual, fotosActual, observacionesActual, comentariosActual, registrosFinalesActual, operario, fecha, lote);
 
-  loteActual = [];
-  fotosActual = [];
-  observacionesActual = [];
-  comentariosActual = [];
-  registrosFinalesActual = [];
-  tiemposProcesamiento = [];
-  siguienteSlot = 0;
-  loteEnEdicion = null;
-  loteFirebaseId = null;
-  loteCodigoAsignado = null;
-  creandoLotePromise = null;
-  document.getElementById('resultado-actual').innerHTML = '';
-  document.getElementById('warning-anomaly-container').innerHTML = '';
-  document.getElementById('lista-observaciones').innerHTML = '';
+  loteActual = []; fotosActual = []; observacionesActual = []; comentariosActual = []; registrosFinalesActual = []; tiemposProcesamiento = [];
+  siguienteSlot = 0; loteEnEdicion = null; loteFirebaseId = null; loteCodigoAsignado = null; creandoLotePromise = null;
   document.getElementById('seccion-observaciones').style.display = 'none';
   document.getElementById('confirmar-check').checked = false;
-  document.getElementById('file-camara').value = '';
-  document.getElementById('file-galeria').value = '';
   actualizarProgreso();
   iniciarRegistro();
-  showToast('✅ Lote finalizado y datos limpiados');
+  showToast('✅ Lote finalizado');
 }
 
 // ============================================================
-// ===== VISOR DE CÁMARA CON DETECCIÓN DINÁMICA ===============
+// ===== AUTO-DISPARO POR ESTABILIDAD (VISOR LOCAL) ===========
 // ============================================================
 
-// ===== CONFIGURACIÓN DEL VISOR =====
-const MOSTRAR_RECORTES_PRUEBA = false;
-
-// La IA analiza una imagen cada cierto tiempo.
-// No son cuadros fijos: las coordenadas vienen de la detección y se suavizan.
-const DETECCION_VISOR_INTERVALO = 1200;
-const DETECCION_VISOR_ANCHO = 1024;
-const SUAVIZADO_VISOR = 0.60;
-const DETECCION_MINIMA_ESTABLE = 1; // una detección válida + suavizado permite capturar sin bloquear al operador
-
-// ===== ESTADO DE LA CÁMARA =====
 let visorStream = null;
-let ultimosRecortes = { placa: null, precinto: null };
-
-// ===== ESTADO DE DETECCIÓN DINÁMICA =====
-let zonasVisorActuales = { placa: null, precinto: null };
-let zonasVisorSuavizadas = { placa: null, precinto: null };
-let zonasVisorCapturadas = { placa: false, precinto: false };
-let zonasVisorEstabilidad = { placa: 0, precinto: 0 };
-let visorDetectando = false;
-let visorDetectorTimer = null;
-let visorDetectorActivo = false;
-let ultimaDeteccionVisor = 0;
+let visorStabilityTimer = null;
+let lastFrameData = null;
+let framesEstables = 0;
+let capturaEnProgreso = false;
 
 function setEstadoVisor(texto, tipo = 'analizando') {
   const estado = document.getElementById('visor-estado');
@@ -2454,207 +2061,56 @@ function setEstadoVisor(texto, tipo = 'analizando') {
   if (hint) hint.textContent = texto;
 }
 
-// ============================================================
-// ===== POSICIONAR GUÍAS ====================================
-// ============================================================
-function posicionarGuias() {
-  const placa = document.getElementById('guia-placa');
-  const precinto = document.getElementById('guia-precinto');
-
-  if (placa) {
-    placa.style.display = 'none';
-    placa.className = 'visor-guia';
-  }
-  if (precinto) {
-    precinto.style.display = 'none';
-    precinto.className = 'visor-guia';
-  }
-
-  zonasVisorCapturadas = { placa: false, precinto: false };
-  zonasVisorEstabilidad = { placa: 0, precinto: 0 };
-  setEstadoVisor('Analizando cámara...');
-}
-
-// ============================================================
-// ===== ACTUALIZAR GUÍA DINÁMICA =============================
-// ============================================================
-function actualizarGuiaDinamica(id, caja, estado = 'detectada') {
-  const el = document.getElementById(id);
-  if (!el) return;
-
-  if (!caja) {
-    el.style.display = 'none';
-    return;
-  }
-
-  el.style.display = 'block';
-  el.className = 'visor-guia ' + (estado === 'capturada' ? 'capturada' : 'detectada');
-  el.style.left = (caja.x1 * 100) + '%';
-  el.style.top = (caja.y1 * 100) + '%';
-  el.style.width = ((caja.x2 - caja.x1) * 100) + '%';
-  el.style.height = ((caja.y2 - caja.y1) * 100) + '%';
-
-  const span = el.querySelector('span');
-  if (span) {
-    const nombre = id === 'guia-placa' ? 'PLACA' : 'PRECINTO';
-    span.textContent = estado === 'capturada' ? nombre + ' ✓' : nombre;
-  }
-}
-
-// ============================================================
-// ===== SUAVIZADO DE DETECCIÓN ===============================
-// ============================================================
-function suavizarCaja(anterior, nueva, factor = SUAVIZADO_VISOR) {
-  if (!nueva) return anterior;
-  if (!anterior) return { ...nueva };
-
-  return {
-    x1: anterior.x1 + (nueva.x1 - anterior.x1) * factor,
-    y1: anterior.y1 + (nueva.y1 - anterior.y1) * factor,
-    x2: anterior.x2 + (nueva.x2 - anterior.x2) * factor,
-    y2: anterior.y2 + (nueva.y2 - anterior.y2) * factor
-  };
-}
-
-function actualizarEstadoGuias() {
-  actualizarGuiaDinamica(
-    'guia-placa',
-    zonasVisorActuales.placa,
-    zonasVisorCapturadas.placa ? 'capturada' : 'detectada'
-  );
-  actualizarGuiaDinamica(
-    'guia-precinto',
-    zonasVisorActuales.precinto,
-    zonasVisorCapturadas.precinto ? 'capturada' : 'detectada'
-  );
-}
-
-// ============================================================
-// ===== DETECTAR ZONAS EN EL VISOR ===========================
-// ============================================================
-async function detectarZonasEnVisor() {
-  if (!visorStream || visorDetectando || !visorDetectorActivo) return;
-
+function iniciarAutoCaptura() {
+  detenerAutoCaptura();
+  capturaEnProgreso = false;
+  framesEstables = 0;
+  lastFrameData = null;
+  
   const video = document.getElementById('visor-video');
-  if (!video || !video.videoWidth || !video.videoHeight) return;
+  const canvas = document.createElement('canvas');
+  canvas.width = 64; canvas.height = 64;
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  
+  document.querySelectorAll('.visor-guia-fija').forEach(el => el.classList.remove('estable'));
+  setEstadoVisor('Alinea el medidor y mantén quieto el celular', 'analizando');
 
-  visorDetectando = true;
-  ultimaDeteccionVisor = Date.now();
-  setEstadoVisor('Analizando placa y precinto...');
-
-  try {
-    const canvas = document.createElement('canvas');
-    const escala = Math.min(DETECCION_VISOR_ANCHO / video.videoWidth, 1);
-    canvas.width = Math.round(video.videoWidth * escala);
-    canvas.height = Math.round(video.videoHeight * escala);
-
-    const ctx = canvas.getContext('2d');
-    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-    const frame = canvas.toDataURL('image/jpeg', 0.90);
-
-    const claves = obtenerClaves(siguienteSlot);
-    if (!claves.length) {
-      setEstadoVisor('Configura una clave API en Admin', 'error');
-      return;
+  visorStabilityTimer = setInterval(() => {
+    if (!visorStream || capturaEnProgreso || video.videoWidth === 0) return;
+    
+    ctx.drawImage(video, 0, 0, 64, 64);
+    const currentData = ctx.getImageData(0, 0, 64, 64).data;
+    
+    if (lastFrameData) {
+      let diff = 0;
+      for (let i = 0; i < currentData.length; i += 16) { 
+        diff += Math.abs(currentData[i] - lastFrameData[i]) + 
+                Math.abs(currentData[i+1] - lastFrameData[i+1]) + 
+                Math.abs(currentData[i+2] - lastFrameData[i+2]);
+      }
+      
+      if (diff < 12000) { 
+        framesEstables++;
+        if (framesEstables === 3) {
+          capturaEnProgreso = true;
+          document.querySelectorAll('.visor-guia-fija').forEach(el => el.classList.add('estable'));
+          setEstadoVisor('¡ESTABLE! Capturando...', 'ok');
+          clearInterval(visorStabilityTimer);
+          setTimeout(() => capturarFijo(), 300);
+        }
+      } else {
+        framesEstables = 0;
+      }
     }
-
-    const zonas = await ubicarZonas(frame, claves);
-    if (!zonas) {
-      setEstadoVisor('La IA no respondió · reintentando...', 'error');
-      return;
-    }
-
-    // Contadores de estabilidad: evitamos aceptar una detección aislada.
-    if (zonas.placa) {
-      zonasVisorEstabilidad.placa++;
-      zonasVisorSuavizadas.placa = suavizarCaja(
-        zonasVisorSuavizadas.placa,
-        zonas.placa
-      );
-      zonasVisorActuales.placa = zonasVisorSuavizadas.placa;
-    } else {
-      zonasVisorEstabilidad.placa = 0;
-    }
-
-    if (zonas.precinto) {
-      zonasVisorEstabilidad.precinto++;
-      zonasVisorSuavizadas.precinto = suavizarCaja(
-        zonasVisorSuavizadas.precinto,
-        zonas.precinto
-      );
-      zonasVisorActuales.precinto = zonasVisorSuavizadas.precinto;
-    } else {
-      zonasVisorEstabilidad.precinto = 0;
-    }
-
-    actualizarEstadoGuias();
-
-    const placaLista = !!zonasVisorActuales.placa && zonasVisorEstabilidad.placa >= DETECCION_MINIMA_ESTABLE;
-    const precintoLista = !!zonasVisorActuales.precinto && zonasVisorEstabilidad.precinto >= DETECCION_MINIMA_ESTABLE;
-
-    if (placaLista && precintoLista) {
-      setEstadoVisor('Placa y precinto detectados ✓ · LISTO PARA CAPTURAR', 'ok');
-    } else if (placaLista) {
-      setEstadoVisor('🟨 PLACA detectada · buscando PRECINTO...');
-    } else if (precintoLista) {
-      setEstadoVisor('🟨 PRECINTO detectado · buscando PLACA...');
-    } else if (zonas.placa || zonas.precinto) {
-      setEstadoVisor('Detección encontrada · preparando captura...');
-    } else if (zonas.error) {
-      setEstadoVisor('IA activa · mueve/acerca el medidor para detectar las zonas...');
-    } else {
-      setEstadoVisor('IA activa · buscando placa y precinto...');
-    }
-
-  } catch (error) {
-    console.error('Error en detección dinámica:', error);
-    setEstadoVisor('Error al analizar · reintentando...', 'error');
-  } finally {
-    visorDetectando = false;
-  }
+    lastFrameData = new Uint8ClampedArray(currentData);
+  }, 300);
 }
 
-// ============================================================
-// ===== INICIAR DETECTOR =====================================
-// ============================================================
-function iniciarDetectorVisor() {
-  detenerDetectorVisor();
-
-  visorDetectorActivo = true;
-  visorDetectando = false;
-  zonasVisorActuales = { placa: null, precinto: null };
-  zonasVisorSuavizadas = { placa: null, precinto: null };
-  zonasVisorCapturadas = { placa: false, precinto: false };
-  zonasVisorEstabilidad = { placa: 0, precinto: 0 };
-
-  posicionarGuias();
-  setEstadoVisor('Analizando cámara...');
-
-  // Primera detección inmediata y luego seguimiento periódico.
-  detectarZonasEnVisor();
-
-  visorDetectorTimer = setInterval(() => {
-    detectarZonasEnVisor();
-  }, DETECCION_VISOR_INTERVALO);
+function detenerAutoCaptura() {
+  if (visorStabilityTimer) clearInterval(visorStabilityTimer);
+  visorStabilityTimer = null;
+  capturaEnProgreso = false;
 }
-
-// ============================================================
-// ===== DETENER DETECTOR =====================================
-// ============================================================
-function detenerDetectorVisor() {
-  visorDetectorActivo = false;
-
-  if (visorDetectorTimer) {
-    clearInterval(visorDetectorTimer);
-    visorDetectorTimer = null;
-  }
-
-  visorDetectando = false;
-}
-
-// ============================================================
-// ===== AJUSTAR VISOR ========================================
-// ============================================================
 
 function ajustarVisor() {
   const video = document.getElementById('visor-video');
@@ -2674,219 +2130,91 @@ function actualizarContadorVisor() {
   document.getElementById('visor-contador').textContent = `Foto ${siguienteSlot} / 12`;
 }
 
-// ============================================================
-// ===== ABRIR VISOR ==========================================
-// ============================================================
-
 async function abrirVisor() {
   if (siguienteSlot === 0 && !loteEnEdicion && !loteManualIngresado) {
-    showToast('⚠️ Ingresa el número de lote antes de tomar la primera foto');
-    return;
+    showToast('⚠️ Ingresa el número de lote antes de tomar la primera foto'); return;
   }
-
-  if (siguienteSlot >= 12) {
-    showToast('Lote completo');
-    return;
-  }
-
+  if (siguienteSlot >= 12) { showToast('Lote completo'); return; }
   if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-    document.getElementById('file-camara').click();
-    return;
+    document.getElementById('file-camara').click(); return;
   }
-
   try {
     visorStream = await navigator.mediaDevices.getUserMedia({
-      video: {
-        facingMode: { ideal: 'environment' },
-        width: { ideal: 2560 },
-        height: { ideal: 1440 }
-      },
+      video: { facingMode: { ideal: 'environment' }, width: { ideal: 2560 }, height: { ideal: 1440 } },
       audio: false
     });
   } catch (e) {
-    console.error('Cámara no disponible:', e);
-    showToast('No se pudo abrir la cámara del visor. Se usará la cámara normal.');
-    document.getElementById('file-camara').click();
-    return;
+    showToast('No se pudo abrir la cámara. Se usará la cámara normal.');
+    document.getElementById('file-camara').click(); return;
   }
 
   const video = document.getElementById('visor-video');
-
   video.srcObject = visorStream;
-
   video.onloadedmetadata = async () => {
     await video.play();
-
     ajustarVisor();
-    posicionarGuias();
     actualizarContadorVisor();
-
-    iniciarDetectorVisor();
+    iniciarAutoCaptura();
   };
-
   document.getElementById('visor-prueba').style.display = 'none';
   document.getElementById('visor').style.display = 'flex';
 }
 
-// ============================================================
-// ===== CERRAR VISOR =========================================
-// ============================================================
-
 function cerrarVisor() {
-  detenerDetectorVisor();
-
-  zonasVisorActuales = {
-    placa: null,
-    precinto: null
-  };
-
-  zonasVisorSuavizadas = {
-    placa: null,
-    precinto: null
-  };
-
-  zonasVisorCapturadas = {
-    placa: false,
-    precinto: false
-  };
-
-  zonasVisorEstabilidad = { placa: 0, precinto: 0 };
-
-  const guiaPlaca = document.getElementById('guia-placa');
-  const guiaPrecinto = document.getElementById('guia-precinto');
-
-  if (guiaPlaca) guiaPlaca.style.display = 'none';
-  if (guiaPrecinto) guiaPrecinto.style.display = 'none';
-
+  detenerAutoCaptura();
   if (visorStream) {
     visorStream.getTracks().forEach(t => t.stop());
     visorStream = null;
   }
-
-  const video = document.getElementById('visor-video');
-  video.srcObject = null;
-
+  document.getElementById('visor-video').srcObject = null;
   document.getElementById('visor').style.display = 'none';
 }
 
-// ============================================================
-// ===== RECORTE DE ZONA DINÁMICA =============================
-// ============================================================
-
 function recortarZonaDinamica(canvasOrigen, caja, margen = 0) {
   if (!caja) return null;
-
   const bw = caja.x2 - caja.x1;
   const bh = caja.y2 - caja.y1;
-
   const x1 = Math.max(0, caja.x1 - bw * margen);
   const x2 = Math.min(1, caja.x2 + bw * margen);
   const y1 = Math.max(0, caja.y1 - bh * margen);
   const y2 = Math.min(1, caja.y2 + bh * margen);
-
   const sx = Math.round(x1 * canvasOrigen.width);
   const sy = Math.round(y1 * canvasOrigen.height);
   const sw = Math.max(1, Math.round((x2 - x1) * canvasOrigen.width));
   const sh = Math.max(1, Math.round((y2 - y1) * canvasOrigen.height));
-
   const c = document.createElement('canvas');
-  c.width = sw;
-  c.height = sh;
-
-  c.getContext('2d').drawImage(
-    canvasOrigen,
-    sx,
-    sy,
-    sw,
-    sh,
-    0,
-    0,
-    sw,
-    sh
-  );
-
-  return c.toDataURL('image/jpeg', 0.92);
+  c.width = sw; c.height = sh;
+  c.getContext('2d').drawImage(canvasOrigen, sx, sy, sw, sh, 0, 0, sw, sh);
+  return c.toDataURL('image/jpeg', 0.95);
 }
 
-function mostrarRecortesPrueba() {
-  const cont = document.getElementById('visor-prueba');
-
-  cont.innerHTML = `
-    <img src="${ultimosRecortes.placa}" style="width:150px">
-    <img src="${ultimosRecortes.precinto}" style="width:60px">
-  `;
-
-  cont.style.display = 'flex';
-
-  clearTimeout(window._timerPrueba);
-
-  window._timerPrueba = setTimeout(() => {
-    cont.style.display = 'none';
-  }, 4000);
-}
-
-// ============================================================
-// ===== CAPTURAR DESDE VISOR ================================
-// ============================================================
-
-function capturarDesdeVisor() {
+function capturarFijo() {
   const video = document.getElementById('visor-video');
   const vw = video.videoWidth, vh = video.videoHeight;
-  
-  if (!vw || !vh) {
-    showToast('La cámara aún no está lista');
-    return;
-  }
-  
-  if (siguienteSlot >= 12) {
-    cerrarVisor();
-    return;
-  }
-
-  const placa = zonasVisorActuales.placa;
-  const precinto = zonasVisorActuales.precinto;
-
-  if (!placa || !precinto) {
-    showToast('⚠️ Espera a que la IA encuadre la placa y el precinto');
-    return;
-  }
+  if (!vw || !vh) return;
+  if (siguienteSlot >= 12) { cerrarVisor(); return; }
 
   const canvas = document.createElement('canvas');
-  canvas.width = vw;
-  canvas.height = vh;
+  canvas.width = vw; canvas.height = vh;
   canvas.getContext('2d').drawImage(video, 0, 0, vw, vh);
 
-  ultimosRecortes = {
-    placa: recortarZonaDinamica(canvas, placa, MARGEN_PLACA),
-    precinto: recortarZonaDinamica(canvas, precinto, MARGEN_PRECINTO)
+  // Coordenadas fijas optimizadas para la placa (arriba) y el precinto (derecha)
+  const cajaPlaca = { x1: 0.10, y1: 0.15, x2: 0.90, y2: 0.50 };
+  const cajaPrecinto = { x1: 0.65, y1: 0.55, x2: 0.90, y2: 0.80 };
+
+  const recortesCaptura = {
+    placa: recortarZonaDinamica(canvas, cajaPlaca, 0.05),
+    precinto: recortarZonaDinamica(canvas, cajaPrecinto, 0.10)
   };
-
-  if (!ultimosRecortes.placa || !ultimosRecortes.precinto) {
-    showToast('⚠️ No se pudieron generar los recortes');
-    return;
-  }
-
-  const recortesCaptura = ultimosRecortes;
-  
-  zonasVisorCapturadas.placa = true;
-  zonasVisorCapturadas.precinto = true;
-  actualizarEstadoGuias();
-  setEstadoVisor('Captura exitosa ✓', 'ok');
-  detenerDetectorVisor();
 
   const caja = document.getElementById('visor-caja');
   caja.style.opacity = '0.3';
   setTimeout(() => { caja.style.opacity = '1'; }, 120);
 
-  if (MOSTRAR_RECORTES_PRUEBA) {
-    mostrarRecortesPrueba();
-  }
+  detenerAutoCaptura();
 
   canvas.toBlob((blob) => {
-    if (!blob) {
-      showToast('No se pudo capturar la foto');
-      return;
-    }
+    if (!blob) return;
     const file = new File([blob], 'captura.jpg', { type: 'image/jpeg' });
     
     procesarFoto({ files: [file], value: '', recortes: recortesCaptura });
@@ -2895,11 +2223,13 @@ function capturarDesdeVisor() {
     if (siguienteSlot >= 12) {
       setTimeout(() => cerrarVisor(), 700);
     } else {
-      setTimeout(() => { if (visorStream) iniciarDetectorVisor(); }, 650);
+      setTimeout(() => { 
+        document.querySelectorAll('.visor-guia-fija').forEach(el => el.classList.remove('estable'));
+        if (visorStream) iniciarAutoCaptura(); 
+      }, 1000);
     }
   }, 'image/jpeg', 0.95);
 }
-
 
 // GENERAR EXCEL + ZIP
 async function generarZIP(datos, fotos, observaciones, comentarios, registrosFinales, operario, fecha, lote) {
@@ -2926,7 +2256,7 @@ async function generarZIP(datos, fotos, observaciones, comentarios, registrosFin
     c.border = opts.borde || borde;
   }
 
- ws.mergeCells('A1:T1');
+  ws.mergeCells('A1:T1');
   aplicar('A1', 'LABORATORIO DE MEDIDORES DE GAS', {negrita:true, tam:18, color_texto:BLANCO, color_fondo:AZUL, borde:bordeMedio});
   ws.getRow(1).height = 35;
   ws.mergeCells('A2:T2');
@@ -2949,10 +2279,9 @@ async function generarZIP(datos, fotos, observaciones, comentarios, registrosFin
     ['K5:N6', 'MODELO', modeloT, 'F4ECF7'],
     ['O5:S6', 'ESTADO DEL\nLOTE', 'APROBADO', VERDE_CLARO]
   ];
-  const AZUL_OSCURO_TARJETA = '17375E';
   tarjetas.forEach(([rango, titulo, valor, color]) => {
     ws.mergeCells(rango);
-    aplicar(rango.split(':')[0], `${titulo}\n${valor}`, {negrita:true, tam:11, color_texto:'FFFFFF', color_fondo:AZUL_OSCURO_TARJETA, borde:bordeMedio});
+    aplicar(rango.split(':')[0], `${titulo}\n${valor}`, {negrita:true, tam:11, color_texto:'FFFFFF', color_fondo:'17375E', borde:bordeMedio});
   });
   ws.getRow(5).height = 28;
   ws.getRow(6).height = 28;
@@ -2975,7 +2304,6 @@ async function generarZIP(datos, fotos, observaciones, comentarios, registrosFin
     const colorFila = i % 2 === 0 ? GRIS : BLANCO;
     const obs = observaciones[i] || 'NINGUNA';
 
-    // Calcular diferencia
     const regIni = parseFloat((d.registro || '0').replace(',', '.'));
     const regFin = parseFloat((registrosFinales[i] || '0').replace(',', '.'));
     const diff = (!isNaN(regIni) && !isNaN(regFin) && registrosFinales[i]) ? (regFin - regIni).toFixed(3).replace('.', ',') : 'N/D';
@@ -3000,70 +2328,6 @@ async function generarZIP(datos, fotos, observaciones, comentarios, registrosFin
     cLink.fill = {type:'pattern', pattern:'solid', fgColor:{argb:'FF'+VERDE_CLARO}};
     cLink.border = borde;
     ws.getRow(fila).height = 16;
-  });
-
-  // COMENTARIOS (si existen)
-  const filaComentariosInicio = 10 + total + 2;
-  const tieneComentarios = comentarios.some(c => c && c.trim() !== '');
-  if (tieneComentarios) {
-    ws.mergeCells(`A${filaComentariosInicio}:N${filaComentariosInicio}`);
-    aplicar(`A${filaComentariosInicio}`, 'COMENTARIOS ADICIONALES', {negrita:true, tam:11, color_texto:BLANCO, color_fondo:VERDE});
-    ws.getRow(filaComentariosInicio).height = 22;
-
-    let f = filaComentariosInicio + 1;
-    comentarios.forEach((c, i) => {
-      if (c && c.trim() !== '') {
-        ws.mergeCells(`A${f}:B${f}`);
-        aplicar(`A${f}`, `#${i+1} (Serie ${datos[i].serie_medidor})`, {negrita:true, tam:9, color_fondo:AZUL_CLARO, alineacion:'left'});
-        ws.mergeCells(`C${f}:N${f}`);
-        aplicar(`C${f}`, c, {tam:9, color_fondo:BLANCO, alineacion:'left'});
-        ws.getRow(f).height = 18;
-        f++;
-      }
-    });
-  }
-
-  // PANEL DETALLES
-  ws.mergeCells('O8:T8');
-  aplicar('O8', 'DETALLES DEL LOTE', {negrita:true, tam:11, color_texto:BLANCO, color_fondo:AZUL});
-
-  const detalles = [
-    ['Lote:', lote], ['Fecha y hora:', fecha], ['Operario:', operario],
-    ['Marca:', marcaT], ['Modelo:', modeloT], ['Tipo:', 'Circular'],
-    ['Vol. Cíclico:', '0.7 dm³ (fijo)'], ['Color:', 'Verde'],
-    ['Total medidores:', String(total)], ['Supervisados:', `${total} (100%)`]
-  ];
-  detalles.forEach(([k, v], i) => {
-    const f = 9 + i;
-    ws.mergeCells(`O${f}:P${f}`);
-    aplicar(`O${f}`, k, {negrita:true, tam:8, color_fondo:AZUL_CLARO, alineacion:'left'});
-    ws.mergeCells(`Q${f}:T${f}`);
-    aplicar(`Q${f}`, v, {tam:8, color_fondo:BLANCO, alineacion:'left'});
-    ws.getRow(f).height = 16;
-  });
-
-  const certFila = 9 + detalles.length + 1;
-  ws.mergeCells(`O${certFila}:T${certFila+2}`);
-  aplicar(`O${certFila}`, `Certifico que el proceso fue supervisado correctamente\n— ${operario} —\n${fecha}`, {negrita:true, italica:true, tam:8, color_fondo:VERDE_CLARO, borde:bordeMedio});
-  ws.getRow(certFila).height = 18;
-  ws.getRow(certFila+1).height = 18;
-  ws.getRow(certFila+2).height = 18;
-
-  const estFila = certFila + 4;
-  ws.mergeCells(`O${estFila}:T${estFila}`);
-  aplicar(`O${estFila}`, 'RESUMEN DE OBSERVACIONES', {negrita:true, tam:10, color_texto:BLANCO, color_fondo:VERDE});
-  ws.getRow(estFila).height = 20;
-
-  const sinObs = observaciones.filter(o => o === 'NINGUNA').length;
-  const conObs = total - sinObs;
-  const stats = [['Sin observación', sinObs, VERDE_CLARO], ['Con observación', conObs, AMARILLO]];
-  stats.forEach(([n, v, c], i) => {
-    const fr = estFila + 1 + i;
-    ws.mergeCells(`O${fr}:Q${fr}`);
-    aplicar(`O${fr}`, n, {tam:9, color_fondo:c});
-    ws.mergeCells(`R${fr}:T${fr}`);
-    aplicar(`R${fr}`, `${v} (${total ? Math.round(v/total*100) : 0}%)`, {negrita:true, tam:9, color_fondo:c});
-    ws.getRow(fr).height = 16;
   });
 
   const excelBuffer = await wb.xlsx.writeBuffer();
@@ -3095,9 +2359,6 @@ function limpiarDatos() {
     showToast('Datos eliminados');
   }
 }
-
-// iniciarApp() ya no se llama aquí directamente: la dispara el login
-// (ver onAuthStateChanged / entrarAlApp en el bloque de Firebase, al inicio del archivo)
 </script>
 </body>
 </html>
