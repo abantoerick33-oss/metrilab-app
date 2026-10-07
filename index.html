@@ -405,7 +405,6 @@
       transition: background 0.3s, color 0.3s;
     }
 
-    /* TEMA OSCURO (default) */
     body.dark {
       --bg-main: #0A0A0F;
       --text-main: white;
@@ -550,7 +549,6 @@
       display: inline-block; padding: 4px 10px; border-radius: 8px; font-size: 11px; font-weight: 500;
       background: rgba(0, 212, 255, 0.15); color: #00D4FF; border: 1px solid rgba(0, 212, 255, 0.3);
     }
-    .badge-offline { background: rgba(245,158,11,0.15); color: #f59e0b; border-color: rgba(245,158,11,0.3); }
 
     .camera-box {
       background: linear-gradient(135deg, rgba(var(--accent-rgb), 0.2), rgba(0, 212, 255, 0.1));
@@ -578,18 +576,6 @@
       border-radius: 10px; padding: 10px; color: var(--text-main); width: 100%;
       margin-top: 8px; font-size: 12px; font-family: inherit; resize: vertical; min-height: 60px;
     }
-
-    .resultado {
-      background: linear-gradient(135deg, rgba(0, 212, 255, 0.1), rgba(var(--accent-rgb), 0.05));
-      border: 1px solid rgba(0, 212, 255, 0.3);
-      border-radius: 16px; padding: 16px; margin-bottom: 16px;
-    }
-    .resultado-title { font-size: 12px; color: #00D4FF; font-weight: bold; margin-bottom: 10px; }
-    .resultado-row { display: flex; justify-content: space-between; font-size: 12px; padding: 4px 0; }
-    .resultado-key { color: var(--text-secondary); }
-    .resultado-val { color: var(--text-main); font-weight: 500; }
-    .resultado-warning { background: rgba(245, 158, 11, 0.1); border-color: rgba(245, 158, 11, 0.4); }
-    .resultado-warning .resultado-title { color: #f59e0b; }
 
     .field-manual {
       background: rgba(245, 158, 11, 0.1); border: 1px solid rgba(245, 158, 11, 0.3);
@@ -683,7 +669,6 @@
     .setup-screen.welcome { justify-content: space-between; padding: 64px 28px 40px; text-align: center; }
     .setup-screen.login-variant { justify-content: center; }
 
-    /* ---- icono animado tipo "ojo tecnológico" (Bienvenida) ---- */
     .circuit-icon-wrap { width: 150px; height: 150px; margin-bottom: 18px; filter: drop-shadow(0 0 22px rgba(var(--accent-rgb), 0.55)); }
     .circuit-icon { width: 100%; height: 100%; }
     .circuit-icon .ring { fill: none; stroke: var(--accent-2); stroke-width: 1; }
@@ -712,7 +697,6 @@
     .feature-icon svg { width: 20px; height: 20px; fill: none; stroke: var(--accent-2); stroke-width: 1.6; }
     .welcome-bottom { width: 100%; max-width: 360px; }
 
-    /* ---- logo tipo check (Login) ---- */
     .login-logo {
       width: 78px; height: 78px; border-radius: 22px; background: #05070A;
       border: 1.5px solid rgba(var(--accent-rgb), 0.6);
@@ -748,23 +732,9 @@
     }
     .btn-outline-glow:disabled { opacity: 0.5; cursor: not-allowed; }
 
-    .loading { text-align: center; padding: 20px; }
-    .spinner {
-      width: 36px; height: 36px;
-      border: 3px solid rgba(var(--accent-rgb), 0.2); border-top-color: var(--accent-2);
-      border-radius: 50%; animation: spin 0.8s linear infinite; margin: 0 auto 10px;
-      box-shadow: 0 0 20px rgba(var(--accent-rgb), 0.3);
-    }
-    @keyframes spin { to { transform: rotate(360deg); } }
-
     input[type=file] { display: none; }
     input, select, textarea { font-family: inherit; }
 
-    .warning-anomaly {
-      background: rgba(245,158,11,0.15); border: 1px solid rgba(245,158,11,0.4);
-      color: #f59e0b; padding: 10px 12px; border-radius: 10px; margin-bottom: 12px;
-      font-size: 12px; text-align: center;
-    }
   /* ===== PANEL DEL JEFE ===== */
   #jefe-panel { max-width: 900px; margin: 0 auto; padding: 20px; color: white; }
   #jefe-panel .topbar { padding: 20px 0; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid rgba(155, 89, 246, 0.2); margin-bottom: 24px; flex-wrap: wrap; gap: 12px; }
@@ -809,46 +779,18 @@
   #jefe-panel .loading { text-align: center; padding: 40px; }
   #jefe-panel .spinner { width: 40px; height: 40px; border: 3px solid rgba(155, 89, 246, 0.2); border-top-color: #9B59F6; border-radius: 50%; animation: jefeSpin 0.8s linear infinite; margin: 0 auto 10px; }
   @keyframes jefeSpin { to { transform: rotate(360deg); } }
-  @media (max-width: 600px) {
-    #jefe-panel .medidor-row { grid-template-columns: 25px 1fr 0.6fr 1fr; font-size: 10px; }
-    #jefe-panel .med-precinto-col { display: none; }
-  }
 
-  /* ===== VISOR DE CÁMARA (GUÍAS FIJAS CON AUTO-DISPARO) ===== */
+  /* ===== VISOR DE CÁMARA (MANUAL DIRECTO A PANTALLA COMPLETA) ===== */
   #visor { position: fixed; inset: 0; background: #000; z-index: 990; flex-direction: column; align-items: center; justify-content: center; padding: 44px 0 110px; }
   .visor-top { position: absolute; top: 0; left: 0; right: 0; height: 44px; display: flex; align-items: center; justify-content: space-between; padding: 0 14px; color: #fff; font-size: 12px; }
   #visor-contador { font-weight: 700; color: #FACC15; font-size: 14px; }
   .visor-hint { color: rgba(255,255,255,0.7); }
-  #visor-caja { position: relative; background: #000; transition: opacity 0.12s; }
-  #visor-video { width: 100%; height: 100%; display: block; }
+  #visor-caja { position: relative; background: #000; transition: opacity 0.12s; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+  #visor-video { width: 100%; height: 100%; object-fit: cover; display: block; }
   
-  .visor-guia-fija { 
-    position: absolute; border: 3px dashed #00D4FF; border-radius: 8px; 
-    background: rgba(0,212,255,0.05); pointer-events: none; 
-    transition: border-color 0.3s, background 0.3s; 
-  }
-  .visor-guia-fija span { 
-    position: absolute; top: 6px; left: 8px; font-size: 11px; 
-    font-weight: 800; color: #00D4FF; text-shadow: 0 1px 3px #000; 
-  }
-  .visor-guia-fija.estable { 
-    border-color: #22C55E; background: rgba(34,197,94,0.15); box-shadow: 0 0 15px rgba(34,197,94,0.5);
-  }
-  .visor-guia-fija.estable span { color: #22C55E; }
+  .visor-estado { position: absolute; top: 45px; left: 50%; transform: translateX(-50%); z-index: 3; display: flex; align-items: center; gap: 7px; padding: 6px 11px; border-radius: 999px; background: rgba(0,0,0,0.68); border: 1px solid rgba(250,204,21,0.45); color: #FACC15; font-size: 11px; font-weight: 700; backdrop-filter: blur(5px); white-space: nowrap; }
   
-  #guia-fija-placa { top: 15%; left: 10%; width: 80%; height: 35%; }
-  #guia-fija-precinto { top: 55%; left: 65%; width: 25%; height: 25%; }
-
-  .visor-estado { position: absolute; top: 45px; left: 50%; transform: translateX(-50%); z-index: 3; display: flex; align-items: center; gap: 7px; padding: 6px 11px; border-radius: 999px; background: rgba(0,0,0,0.68); border: 1px solid rgba(250,204,21,0.45); color: #FACC15; font-size: 11px; font-weight: 700; letter-spacing: 0.2px; backdrop-filter: blur(5px); white-space: nowrap; }
-  .visor-estado::before { content: ''; width: 8px; height: 8px; border-radius: 50%; background: #FACC15; box-shadow: 0 0 8px rgba(250,204,21,0.9); animation: visorEstadoPulso 0.9s ease-in-out infinite; }
-  .visor-estado.ok { color: #22C55E; border-color: rgba(34,197,94,0.5); }
-  .visor-estado.ok::before { background: #22C55E; box-shadow: 0 0 8px rgba(34,197,94,0.9); animation: none; }
-  .visor-estado.error { color: #F87171; border-color: rgba(248,113,113,0.5); }
-  .visor-estado.error::before { background: #F87171; box-shadow: 0 0 8px rgba(248,113,113,0.9); animation: none; }
-  @keyframes visorEstadoPulso { 0%,100% { opacity: .45; transform: scale(.8); } 50% { opacity: 1; transform: scale(1.15); } }
-  #visor-prueba { position: absolute; bottom: 6px; left: 6px; display: none; gap: 6px; align-items: flex-end; background: rgba(0,0,0,0.6); padding: 6px; border-radius: 8px; }
-  #visor-prueba img { border: 1px solid #FACC15; border-radius: 4px; display: block; }
-  .visor-botones { position: absolute; bottom: 0; left: 0; right: 0; height: 110px; display: flex; align-items: center; justify-content: space-around; padding: 0 16px 10px; }
+  .visor-botones { position: absolute; bottom: 0; left: 0; right: 0; height: 110px; display: flex; align-items: center; justify-content: space-around; padding: 0 16px 10px; z-index: 5; background: linear-gradient(to top, rgba(0,0,0,0.8), transparent); }
   .visor-cerrar { width: 80px; background: rgba(255,255,255,0.15); border: 1px solid rgba(255,255,255,0.3); color: #fff; padding: 10px 0; border-radius: 12px; font-size: 13px; font-weight: 600; cursor: pointer; }
   .visor-disparo { width: 74px; height: 74px; border-radius: 50%; background: #fff; border: 5px solid rgba(255,255,255,0.4); box-shadow: 0 0 0 3px #fff; cursor: pointer; }
   .visor-disparo:active { transform: scale(0.92); }
@@ -1109,24 +1051,20 @@
   </nav>
 </div>
 
-<!-- VISOR CON GUÍAS FIJAS Y AUTO-DISPARO POR ESTABILIDAD -->
+<!-- VISOR CON DISPARO MANUAL DIRECTO A PANTALLA COMPLETA -->
 <div id="visor" style="display:none">
   <div class="visor-top">
     <span id="visor-contador">0 / 12</span>
-    <span class="visor-hint">Encaja el medidor y mantén el celular quieto</span>
+    <span class="visor-hint">Apunta al medidor y presiona el botón</span>
   </div>
   <div id="visor-caja">
     <video id="visor-video" autoplay playsinline muted></video>
-    <div class="visor-estado" id="visor-estado">Iniciando cámara...</div>
-    
-    <div id="guia-fija-placa" class="visor-guia-fija"><span>PLACA</span></div>
-    <div id="guia-fija-precinto" class="visor-guia-fija"><span>PRECINTO</span></div>
-    
+    <div class="visor-estado" id="visor-estado">Cámara lista</div>
     <div id="visor-prueba"></div>
   </div>
   <div class="visor-botones">
     <button class="visor-cerrar" onclick="cerrarVisor()">✕ Cancelar</button>
-    <button class="visor-disparo" onclick="capturarFijo()"></button>
+    <button class="visor-disparo" onclick="capturarFotoManual()"></button>
     <div style="width:80px"></div>
   </div>
 </div>
@@ -1252,19 +1190,6 @@ EJEMPLO DE RESPUESTA CORRECTA (para un medidor que muestra "00123,422"):
 Si algún campo no es visible o legible, usa null. Devuelve SOLO el JSON, sin markdown, sin explicaciones.`;
 
 const MODELO_IA = 'gemini-2.5-flash';
-const PROMPT_RECORTES = `Lee estas imágenes de un medidor de gas. Imagen 1: placa frontal con el contador y los datos impresos. Imagen 2: precinto de seguridad.
-
-Devuelve SOLO un objeto JSON con este esquema exacto, sin texto adicional:
-{"marca":"string o null","modelo":"string o null","serie_medidor":"string o null","anio_medidor":"string o null","registro":"string o null","serie_precinto":"string o null"}
-
-Reglas:
-- marca: fabricante impreso (ej: METREX, APOLO).
-- modelo: capacidad con punto decimal (ej: G1.6, G2.5). Nunca G1,6 ni G16.
-- serie_medidor: número de serie impreso junto al código de barras, solo dígitos.
-- anio_medidor: año de fabricación de 4 dígitos, impreso junto al número de serie (entre 2005 y hoy).
-- registro: SOLO los 5 dígitos del contador que están ANTES de la coma. No incluyas la coma ni los dígitos rojos. Ej: si ves 00478,134 devuelve 00478.
-- serie_precinto: formato G + 7 dígitos (ej: G0382186), leído de la imagen 2. Puede estar rotado.
-Si un campo no se lee con seguridad, usa null.`;
 
 // TEMA
 function toggleTheme() {
@@ -1478,7 +1403,7 @@ function actualizarAdmin() {
   document.getElementById('admin-lotes-marco').textContent = `${activos.filter(l=>l.operario.includes('Marco')).length} lotes`;
 }
 
-async function redimensionarImagen(dataUrl, maxAncho = 1024) {
+async function redimensionarImagen(dataUrl, maxAncho = 1000) {
   return new Promise((resolve) => {
     const img = new Image();
     img.onload = () => {
@@ -1488,7 +1413,7 @@ async function redimensionarImagen(dataUrl, maxAncho = 1024) {
       canvas.height = img.height * scale;
       const ctx = canvas.getContext('2d');
       ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-      resolve(canvas.toDataURL('image/jpeg', 0.85));
+      resolve(canvas.toDataURL('image/jpeg', 0.90));
     };
     img.onerror = () => resolve(dataUrl);
     img.src = dataUrl;
@@ -1504,8 +1429,6 @@ function validarCampos(datos) {
   });
   return faltantes;
 }
-
-function detectarAnomalia() { return null; }
 
 async function sincronizarMedidorConFirebase(slot, datos) {
   if (!loteFirebaseId) {
@@ -1545,7 +1468,6 @@ function detectarCamposDudosos(d) {
 let _geminiActivas = 0;
 const _geminiEspera = [];
 const MAX_GEMINI_SIMULTANEAS = 3;
-const dormir = ms => new Promise(r => setTimeout(r, ms));
 
 function geminiAdquirir() {
   return new Promise(res => {
@@ -1584,7 +1506,7 @@ async function unaLlamada(modelo, key, partes, temp, maxTokens) {
     const texto = cand && cand.content && cand.content.parts ? cand.content.parts.map(p => p.text || '').join('') : '';
     if (!texto) {
       const bloqueo = data && data.promptFeedback && data.promptFeedback.blockReason;
-      return { tipo: 'transitorio', motivo: bloqueo ? `bloqueada (${bloqueo})` : (cand && cand.finishReason && cand.finishReason !== 'STOP' ? `respuesta incompleta (${cand.finishReason})` : 'respuesta vacía') };
+      return { tipo: 'transitorio', motivo: bloqueo ? `bloqueada (${bloqueo})` : 'respuesta vacía' };
     }
     const ini = texto.indexOf('{'), fin = texto.lastIndexOf('}');
     if (ini === -1 || fin <= ini) return { tipo: 'transitorio', motivo: 'respuesta sin JSON' };
@@ -1598,7 +1520,7 @@ async function unaLlamada(modelo, key, partes, temp, maxTokens) {
   }
 }
 
-async function llamarGemini({ modelo, partes, temp = 0, maxTokens = 300, claves, rondas = 3 }) {
+async function llamarGemini({ modelo, partes, temp = 0, maxTokens = 500, claves, rondas = 3 }) {
   if (!claves.length) return { error: 'no hay claves API (configúralas en Admin)' };
   let motivo = 'sin respuesta';
   for (let ronda = 0; ronda < rondas; ronda++) {
@@ -1610,8 +1532,7 @@ async function llamarGemini({ modelo, partes, temp = 0, maxTokens = 300, claves,
       if (r.tipo !== 'fatal') reintentable = true;
     }
     if (!reintentable || ronda === rondas - 1) break;
-    showToast('⏳ IA ocupada, reintentando...');
-    await dormir(ronda === 0 ? 3000 : 8000);
+    await new Promise(res => setTimeout(res, 2000));
   }
   return { error: motivo };
 }
@@ -1640,24 +1561,11 @@ function obtenerClaves(slot) {
   return [...todas.slice(inicio), ...todas.slice(0, inicio)];
 }
 
-function construirPartes(rec64, base64Completa, extra, completa) {
-  const img = d => ({inline_data: {mime_type: 'image/jpeg', data: d}});
-  if (!rec64) return [img(base64Completa), {text: PROMPT + extra}];
-  const partes = [img(rec64.placa), img(rec64.precinto)];
-  let texto = PROMPT_RECORTES;
-  if (completa) {
-    partes.push(img(base64Completa));
-    texto += '\nImagen 3: foto completa del medidor. Úsala si la placa o el precinto no se ven bien en las imágenes 1 y 2.';
-  }
-  partes.push({text: texto + extra});
-  return partes;
-}
-
 async function analizarSlot(slot, original, recortesVisor) {
   const tiempoInicio = Date.now();
   let imgOptimizada = null;
   try {
-    imgOptimizada = await redimensionarImagen(original, 900);
+    imgOptimizada = await redimensionarImagen(original, 1000);
     const base64 = imgOptimizada.split(',')[1];
     const claves = obtenerClaves(slot);
 
@@ -1666,10 +1574,10 @@ async function analizarSlot(slot, original, recortesVisor) {
       { text: PROMPT }
     ];
 
-    await new Promise(r => setTimeout(r, 1000));
+    await new Promise(r => setTimeout(r, 600));
 
     const r = await llamarGemini({ modelo: MODELO_IA, partes, temp: 0, maxTokens: 500, claves, rondas: 3 });
-    let datos = r.json || null;
+    let datos = r.json ? normalizarLectura(r.json) : null;
     const motivo = r.error || '';
 
     if (datos) {
@@ -1855,7 +1763,6 @@ function eliminarMedidor(idx) {
   siguienteSlot--;
   actualizarProgreso();
   if (loteActual.length === 0) {
-    document.getElementById('resultado-actual').innerHTML = '';
     document.getElementById('seccion-observaciones').style.display = 'none';
   } else {
     renderObservaciones();
@@ -2027,89 +1934,10 @@ async function finalizarLote() {
 }
 
 // ============================================================
-// ===== AUTO-DISPARO POR ESTABILIDAD (VISOR LOCAL) ===========
+// ===== CÁMARA MANUAL Y DISPARO DIRECTO (SIN GUÍAS) =========
 // ============================================================
 
 let visorStream = null;
-let visorStabilityTimer = null;
-let lastFrameData = null;
-let framesEstables = 0;
-let capturaEnProgreso = false;
-
-function setEstadoVisor(texto, tipo = 'analizando') {
-  const estado = document.getElementById('visor-estado');
-  const hint = document.querySelector('.visor-hint');
-  if (estado) {
-    estado.textContent = texto;
-    estado.className = 'visor-estado' + (tipo === 'ok' ? ' ok' : tipo === 'error' ? ' error' : '');
-  }
-  if (hint) hint.textContent = texto;
-}
-
-function iniciarAutoCaptura() {
-  detenerAutoCaptura();
-  capturaEnProgreso = false;
-  framesEstables = 0;
-  lastFrameData = null;
-  
-  const video = document.getElementById('visor-video');
-  const canvas = document.createElement('canvas');
-  canvas.width = 64; canvas.height = 64;
-  const ctx = canvas.getContext('2d', { willReadFrequently: true });
-  
-  document.querySelectorAll('.visor-guia-fija').forEach(el => el.classList.remove('estable'));
-  setEstadoVisor('Alinea el medidor y mantén quieto el celular', 'analizando');
-
-  visorStabilityTimer = setInterval(() => {
-    if (!visorStream || capturaEnProgreso || video.videoWidth === 0) return;
-    
-    ctx.drawImage(video, 0, 0, 64, 64);
-    const currentData = ctx.getImageData(0, 0, 64, 64).data;
-    
-    if (lastFrameData) {
-      let diff = 0;
-      for (let i = 0; i < currentData.length; i += 16) { 
-        diff += Math.abs(currentData[i] - lastFrameData[i]) + 
-                Math.abs(currentData[i+1] - lastFrameData[i+1]) + 
-                Math.abs(currentData[i+2] - lastFrameData[i+2]);
-      }
-      
-      if (diff < 12000) { 
-        framesEstables++;
-        if (framesEstables === 3) {
-          capturaEnProgreso = true;
-          document.querySelectorAll('.visor-guia-fija').forEach(el => el.classList.add('estable'));
-          setEstadoVisor('¡ESTABLE! Capturando...', 'ok');
-          clearInterval(visorStabilityTimer);
-          setTimeout(() => capturarFijo(), 300);
-        }
-      } else {
-        framesEstables = 0;
-      }
-    }
-    lastFrameData = new Uint8ClampedArray(currentData);
-  }, 300);
-}
-
-function detenerAutoCaptura() {
-  if (visorStabilityTimer) clearInterval(visorStabilityTimer);
-  visorStabilityTimer = null;
-  capturaEnProgreso = false;
-}
-
-function ajustarVisor() {
-  const video = document.getElementById('visor-video');
-  const caja = document.getElementById('visor-caja');
-  const vw = video.videoWidth, vh = video.videoHeight;
-  if (!vw || !vh) return;
-  const maxW = window.innerWidth;
-  const maxH = window.innerHeight - 154;
-  const escala = Math.min(maxW / vw, maxH / vh);
-  caja.style.width = Math.floor(vw * escala) + 'px';
-  caja.style.height = Math.floor(vh * escala) + 'px';
-}
-
-window.addEventListener('resize', ajustarVisor);
 
 function actualizarContadorVisor() {
   document.getElementById('visor-contador').textContent = `Foto ${siguienteSlot} / 12`;
@@ -2125,7 +1953,7 @@ async function abrirVisor() {
   }
   try {
     visorStream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: { ideal: 'environment' }, width: { ideal: 2560 }, height: { ideal: 1440 } },
+      video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } },
       audio: false
     });
   } catch (e) {
@@ -2137,16 +1965,13 @@ async function abrirVisor() {
   video.srcObject = visorStream;
   video.onloadedmetadata = async () => {
     await video.play();
-    ajustarVisor();
     actualizarContadorVisor();
-    iniciarAutoCaptura();
+    document.getElementById('visor-estado').textContent = 'Cámara lista';
   };
-  document.getElementById('visor-prueba').style.display = 'none';
   document.getElementById('visor').style.display = 'flex';
 }
 
 function cerrarVisor() {
-  detenerAutoCaptura();
   if (visorStream) {
     visorStream.getTracks().forEach(t => t.stop());
     visorStream = null;
@@ -2155,33 +1980,7 @@ function cerrarVisor() {
   document.getElementById('visor').style.display = 'none';
 }
 
-function recortarZonaDinamica(canvasOrigen, caja, margen = 0) {
-  if (!caja) return null;
-  const bw = caja.x2 - caja.x1;
-  const bh = caja.y2 - caja.y1;
-  const x1 = Math.max(0, caja.x1 - bw * margen);
-  const x2 = Math.min(1, caja.x2 + bw * margen);
-  const y1 = Math.max(0, caja.y1 - bh * margen);
-  const y2 = Math.min(1, caja.y2 + bh * margen);
-  
-  const sx = Math.round(x1 * canvasOrigen.width);
-  const sy = Math.round(y1 * canvasOrigen.height);
-  const sw = Math.max(1, Math.round((x2 - x1) * canvasOrigen.width));
-  const sh = Math.max(1, Math.round((y2 - y1) * canvasOrigen.height));
-  
-  const c = document.createElement('canvas');
-  c.width = 800; 
-  c.height = Math.round(800 * (sh / sw));
-  
-  const ctx = c.getContext('2d');
-  ctx.imageSmoothingEnabled = true;
-  ctx.imageSmoothingQuality = 'high';
-  ctx.drawImage(canvasOrigen, sx, sy, sw, sh, 0, 0, c.width, c.height);
-  
-  return c.toDataURL('image/jpeg', 0.90);
-}
-
-function capturarFijo() {
+function capturarFotoManual() {
   const video = document.getElementById('visor-video');
   const vw = video.videoWidth, vh = video.videoHeight;
   if (!vw || !vh) return;
@@ -2192,36 +1991,17 @@ function capturarFijo() {
   const ctx = canvas.getContext('2d');
   ctx.drawImage(video, 0, 0, vw, vh);
 
-  const cajaPlaca = { x1: 0.10, y1: 0.15, x2: 0.90, y2: 0.50 };
-  const cajaPrecinto = { x1: 0.65, y1: 0.55, x2: 0.90, y2: 0.80 };
-
-  const recortesCaptura = {
-    placa: recortarZonaDinamica(canvas, cajaPlaca, 0.05),
-    precinto: recortarZonaDinamica(canvas, cajaPrecinto, 0.10)
-  };
-
   const caja = document.getElementById('visor-caja');
   caja.style.opacity = '0.2';
   setTimeout(() => { caja.style.opacity = '1'; }, 100);
 
-  detenerAutoCaptura();
+  cerrarVisor();
 
   canvas.toBlob((blob) => {
     if (!blob) return;
     const file = new File([blob], 'captura.jpg', { type: 'image/jpeg' });
-    
-    procesarFoto({ files: [file], value: '', recortes: recortesCaptura });
-    actualizarContadorVisor();
-
-    if (siguienteSlot >= 12) {
-      setTimeout(() => cerrarVisor(), 700);
-    } else {
-      setTimeout(() => { 
-        document.querySelectorAll('.visor-guia-fija').forEach(el => el.classList.remove('estable'));
-        if (visorStream) iniciarAutoCaptura(); 
-      }, 800);
-    }
-  }, 'image/jpeg', 0.90);
+    procesarFoto({ files: [file], value: '', recortes: null });
+  }, 'image/jpeg', 0.92);
 }
 
 // GENERAR EXCEL + ZIP
@@ -2230,7 +2010,7 @@ async function generarZIP(datos, fotos, observaciones, comentarios, registrosFin
   const ws = wb.addWorksheet('Registro');
 
   const AZUL = '17375E', AZUL_CLARO = 'D9EAF7', VERDE = '2E8B57', VERDE_CLARO = 'EAF7EE';
-  const ROJO = 'C0392B', GRIS = 'F4F6F7', BLANCO = 'FFFFFF', AMARILLO = 'FCF3CF';
+  const ROJO = 'C0392B', GRIS = 'F4F6F7', BLANCO = 'FFFFFF';
   const AZUL_LINK = '1E40AF';
 
   const borde = {top:{style:'thin'}, left:{style:'thin'}, bottom:{style:'thin'}, right:{style:'thin'}};
